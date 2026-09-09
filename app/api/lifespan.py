@@ -33,15 +33,15 @@ async def lifespan(app: FastAPI):
     # 启动阶段：先建立各类外部服务客户端，后续依赖函数会从 manager 中取已初始化对象
     qdrant_client_manager.init()
     if qdrant_client_manager.client is None:
-        logger.warning("Qdrant 不可用，项目将使用本地演示模式补足召回链路")
+        logger.warning("Qdrant 客户端初始化失败")
 
     embedding_client_manager.init()
     if embedding_client_manager.client is None:
-        logger.warning("Embedding 服务不可用，项目将使用本地演示模式补足召回链路")
+        logger.warning("Embedding 客户端初始化失败")
 
     es_client_manager.init()
-    if es_client_manager.client is None:
-        logger.warning("Elasticsearch 不可用，项目将使用本地演示模式补足召回链路")
+    if es_client_manager.client is None and not app_config.local_mode:
+        logger.warning("Elasticsearch 客户端初始化失败")
 
     meta_mysql_client_manager.init()
     dw_mysql_client_manager.init()
@@ -54,29 +54,63 @@ async def lifespan(app: FastAPI):
 
     if not app_config.demo_mode:
         missing: list[str] = []
-        if qdrant_client_manager.client is None:
-            missing.append("Qdrant")
-        else:
+        if app_config.local_mode:
+            # 本地模式使用 Qdrant 的嵌入式存储和本地字段值索引，不依赖外部端口。
             try:
-                await qdrant_client_manager.client.get_collections()
-                if not await qdrant_client_manager.client.collection_exists(ColumnQdrantRepository.collection_name):
-                    missing.append("Qdrant 字段 collection")
-                if not await qdrant_client_manager.client.collection_exists(MetricQdrantRepository.collection_name):
-                    missing.append("Qdrant 指标 collection")
-            except Exception:
+                if qdrant_client_manager.client is None:
+                    missing.append("本地 Qdrant")
+                else:
+                    await ColumnQdrantRepository(
+                        qdrant_client_manager.client
+                    ).ensure_collection()
+                    await MetricQdrantRepository(
+                        qdrant_client_manager.client
+                    ).ensure_collection()
+            except Exception as exc:
+                logger.exception("本地 Qdrant 初始化失败")
+                missing.append(f"本地 Qdrant ({exc})")
+
+            try:
+                await ValueESRepository(es_client_manager.client).ensure_index()
+            except Exception as exc:
+                logger.exception("本地字段值索引初始化失败")
+                missing.append(f"本地字段值索引 ({exc})")
+
+            try:
+                await embedding_client_manager.health_check()
+            except Exception as exc:
+                logger.exception("本地 Embedding 健康检查失败")
+                missing.append(f"本地 Embedding ({exc})")
+        else:
+            if qdrant_client_manager.client is None:
                 missing.append("Qdrant")
-        if es_client_manager.client is None:
-            missing.append("Elasticsearch")
-        else:
-            try:
-                if not await es_client_manager.client.ping():
-                    missing.append("Elasticsearch")
-                elif not await es_client_manager.client.indices.exists(index=ValueESRepository.index_name):
-                    missing.append("Elasticsearch value_index")
-            except Exception:
+            else:
+                try:
+                    await qdrant_client_manager.client.get_collections()
+                    if not await qdrant_client_manager.client.collection_exists(
+                        ColumnQdrantRepository.collection_name
+                    ):
+                        missing.append("Qdrant 字段 collection")
+                    if not await qdrant_client_manager.client.collection_exists(
+                        MetricQdrantRepository.collection_name
+                    ):
+                        missing.append("Qdrant 指标 collection")
+                except Exception:
+                    missing.append("Qdrant")
+            if es_client_manager.client is None:
                 missing.append("Elasticsearch")
-        if embedding_client_manager.client is None:
-            missing.append("Embedding")
+            else:
+                try:
+                    if not await es_client_manager.client.ping():
+                        missing.append("Elasticsearch")
+                    elif not await es_client_manager.client.indices.exists(
+                        index=ValueESRepository.index_name
+                    ):
+                        missing.append("Elasticsearch value_index")
+                except Exception:
+                    missing.append("Elasticsearch")
+            if embedding_client_manager.client is None:
+                missing.append("Embedding")
         if not app_config.llm.api_key:
             missing.append("LLM_API_KEY")
         if not app_config.llm.base_url:

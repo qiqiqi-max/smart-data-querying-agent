@@ -32,7 +32,10 @@ class ESClientManager:
         hosts 之所以是列表，是为了兼容 ES 常见的集群连接方式
         """
         try:
-            self.client = AsyncElasticsearch(hosts=[self._get_url()])
+            if app_config.local_mode:
+                self.client = None
+            else:
+                self.client = AsyncElasticsearch(hosts=[self._get_url()])
         except Exception:
             self.client = None
 

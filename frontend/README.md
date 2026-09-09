@@ -3,9 +3,9 @@
   记录启动方式、代理配置和部署时的环境变量
 -->
 
-# Shopkeeper Agent Frontend
+# Smart Data Querying Agent Frontend
 
-匹配后端 `shopkeeper-agent` 的电商问数工作台，技术栈为 React + Vite + Tailwind CSS + pnpm。
+`Smart Data Querying Agent` 的电商智能问数工作台，技术栈为 React + Vite + Tailwind CSS + pnpm。
 
 当前前端包含：
 

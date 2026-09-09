@@ -11,7 +11,7 @@ from typing import Optional
 
 from qdrant_client import AsyncQdrantClient, models
 
-from app.conf.app_config import QdrantConfig, app_config
+from app.conf.app_config import QdrantConfig, app_config, resolve_project_path
 
 
 class QdrantClientManager:
@@ -33,7 +33,14 @@ class QdrantClientManager:
         这里不在 __init__ 中直接初始化，是为了和项目的生命周期管理保持一致
         """
         try:
-            self.client = AsyncQdrantClient(url=self._get_url())
+            if app_config.local_mode:
+                storage_path = resolve_project_path(app_config.local_data_dir) / "qdrant"
+                storage_path.mkdir(parents=True, exist_ok=True)
+                self.client = AsyncQdrantClient(
+                    path=str(storage_path), check_compatibility=False
+                )
+            else:
+                self.client = AsyncQdrantClient(url=self._get_url())
         except Exception:
             self.client = None
 

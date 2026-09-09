@@ -34,7 +34,7 @@ const examples = [
 ];
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "Vite /api proxy";
-const RUNS_STORAGE_KEY = "shopkeeper-agent.recent-runs";
+const RUNS_STORAGE_KEY = "smart-data-querying-agent.recent-runs";
 const MAX_RECENT_RUNS = 6;
 
 function makeId() {

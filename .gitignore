@@ -53,6 +53,7 @@ yarn-error.log
 testem.log
 /typings
 /logs/
+.local-data/
 /backend.log
 /backend.err.log
 /frontend/frontend.log

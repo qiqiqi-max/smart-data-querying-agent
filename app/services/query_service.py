@@ -10,11 +10,10 @@ import asyncio
 import json
 import uuid
 
-from langchain_huggingface import HuggingFaceEndpointEmbeddings
-
 from app.agent.context import DataAgentContext
 from app.agent.graph import graph
 from app.agent.state import DataAgentState
+from app.clients.embedding_client import EmbeddingClient
 from app.repositories.es.value_es_repository import ValueESRepository
 from app.repositories.mysql.dw.dw_mysql_repository import DWMySQLRepository
 from app.repositories.mysql.meta.meta_mysql_repository import MetaMySQLRepository
@@ -31,7 +30,7 @@ class QueryService:
     def __init__(
         self,
         meta_mysql_repository: MetaMySQLRepository,
-        embedding_client: HuggingFaceEndpointEmbeddings,
+        embedding_client: EmbeddingClient,
         dw_mysql_repository: DWMySQLRepository,
         column_qdrant_repository: ColumnQdrantRepository,
         metric_qdrant_repository: MetricQdrantRepository,

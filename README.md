@@ -1,7 +1,7 @@
 <div align="center">
-  <h1 style="margin-top: 15px;">电商问数智能数据分析 Agent</h1>
-  <h4><b>shopkeeper-agent</b></h4>
-  <p><em>面向电商数仓问数场景的智能数据分析工作台，支持自然语言提问、混合检索、LangGraph 流程编排、SQL 生成校验和 SSE 流式返回</em></p>
+  <h1 style="margin-top: 15px;">Smart Data Querying Agent</h1>
+  <h3>电商智能问数系统</h3>
+  <p><em>面向电商数仓的自然语言数据查询工作台，串联元数据检索、SQL 生成与校验、MySQL 查询和结果展示。</em></p>
 </div>
 
 <div align="center">
@@ -16,13 +16,13 @@
 
 </div>
 
-![电商问数工作台空状态，左侧样例与会话控制，中间问答区，右侧运行概览](docs/images/shopkeeper-agent-home.jpg)
+![电商问数工作台空状态，左侧样例与会话控制，中间问答区，右侧运行概览](docs/images/smart-data-querying-agent-home.jpg)
 
-![电商问数查询结果页，展示 LangGraph 执行流程和查询结果表格](docs/images/shopkeeper-agent-query-result.jpg)
+![电商问数查询结果页，展示 LangGraph 执行流程和查询结果表格](docs/images/smart-data-querying-agent-query-result.jpg)
 
 ## 项目简介
 
-这个项目解决的是一个很具体的问题: 业务同学想问数，但不想自己写 SQL，也不想去记表、字段、指标和口径。
+这个项目面向电商数据分析场景，解决业务人员查询数据时需要依赖 SQL 和数据开发的问题。用户输入自然语言问题，系统根据元数据和字段取值生成查询上下文，再生成经过安全校验的 SQL，从 MySQL 数仓返回结果。
 
 现在这版已经把召回、生成、校验、执行和展示串成了一条完整链路:
 
@@ -40,18 +40,18 @@
 
 ## 现在的前端
 
-这版界面重点做了三件事:
+前端界面采用三栏工作台，围绕一次查询所需的信息组织布局:
 
-1. 把问数流程收进一个三栏工作台，信息更集中。
-2. 保留流式反馈，让每一步执行状态都看得见。
-3. 查询历史写入 MySQL，刷新页面后仍然能打开最近结果。
-4. 表格结果会自动识别维度和数值列，补充轻量柱状图。
+1. 左侧提供样例问题、新建会话和接口状态。
+2. 中间展示对话、执行进度、SQL 和查询结果。
+3. 右侧保存最近分析记录，可恢复或删除历史查询。
+4. 结果表格会识别维度列和数值列，并提供轻量图表辅助阅读。
 
 移动端会自动收敛成单栏布局，桌面端保持三栏。
 
 ## 核心能力
 
-- 混合检索: 在线模式下 `Qdrant` 负责字段和指标语义召回，`Elasticsearch` 负责字段取值检索，`MySQL` 保存结构化元数据。
+- 混合检索: 默认本地模式使用嵌入式 `Qdrant` 完成字段和指标语义召回，并使用本地持久化字段值索引；外部模式可切换到 `Elasticsearch`。
 - 流程编排: `LangGraph` 负责把召回、过滤、生成、校验和执行串起来。
 - 实时返回: 后端通过 `SSE` 推送节点进度、结果和错误信息。
 - 结果展示: 前端同时提供结果表格和轻量柱状图，便于快速读数。
@@ -74,15 +74,16 @@
 | 元数据存储 | `MySQL` / `SQLAlchemy` | 保存表、字段、指标等结构化信息 |
 | 查询历史 | `MySQL` | 保存问题、状态、摘要、结果和错误信息 |
 | SQL 安全 | `sqlglot` + `EXPLAIN` | 限制只读查询并在执行前校验 |
-| 向量检索 | `Qdrant` | 存储字段和指标向量 |
-| 全文检索 | `Elasticsearch` | 检索字段真实取值 |
+| 向量检索 | `Qdrant` | 本地模式使用嵌入式存储，外部模式连接 Qdrant 服务 |
+| 字段值检索 | 本地索引 / `Elasticsearch` | 本地模式无需额外服务，外部模式支持 Elasticsearch |
+| 本地 Embedding | `PyTorch` / `Transformers` | 加载 BGE 模型生成 1024 维向量 |
 | 前端 | `React` / `Vite` / `Tailwind CSS` | 提供三栏工作台和结果展示 |
 | 依赖管理 | `uv` / `pnpm` | 管理后端和前端依赖 |
 
 ## 项目结构
 
 ```text
-shopkeeper-agent/
+smart-data-querying-agent/
 ├── app/                  # 后端业务代码、智能体、接口、服务和仓储
 ├── conf/                 # app_config.yaml、meta_config.yaml
 ├── docs/                 # 项目截图和架构图
@@ -94,7 +95,7 @@ shopkeeper-agent/
 
 ## 本地运行
 
-项目默认使用完整 API 模式，需要本地 MySQL、Qdrant、Elasticsearch、Embedding 和兼容 OpenAI 的大模型服务。启动时会检查完整模式依赖；如只需离线体验，可显式设置 `SHOPKEEPER_DEMO_MODE=true`。
+项目默认使用完整 API 模式和本地原生模式，不需要 Docker。真实数据来自本地 MySQL，字段和指标向量写入本地嵌入式 Qdrant，字段取值写入本地索引文件，Embedding 直接加载本地 BGE 模型，大模型使用兼容 OpenAI 的 API。`SHOPKEEPER_DEMO_MODE` 默认保持关闭；只有显式设置为 `true` 才会进入演示链路。
 
 ### API 接口
 
@@ -104,7 +105,7 @@ shopkeeper-agent/
 | `GET` | `/api/query/history` | 获取最近查询历史 |
 | `DELETE` | `/api/query/history/{history_id}` | 删除单条查询历史 |
 
-完整模式下，外部服务缺失或查询失败会返回明确错误，不会静默生成演示结果。
+完整模式下，外部服务或本地索引缺失会返回明确错误，不会静默生成演示结果。
 
 ### 1. 准备环境
 
@@ -112,12 +113,13 @@ shopkeeper-agent/
 - `uv`
 - Node.js
 - `pnpm`
+- 本地 BGE 模型文件（默认路径为 `docker/embedding/bge-large-zh-v1.5`）
 
 ### 2. 克隆项目
 
 ```bash
-git clone https://github.com/qiqiqi-max/shopkeeper-agent.git
-cd shopkeeper-agent
+git clone https://github.com/qiqiqi-max/smart-data-querying-agent.git
+cd smart-data-querying-agent
 ```
 
 ### 3. 安装后端依赖
@@ -128,15 +130,25 @@ uv sync
 
 ### 4. 准备本地数据库
 
-先把 [docker/mysql/meta.sql](docker/mysql/meta.sql) 和 [docker/mysql/dw.sql](docker/mysql/dw.sql) 导入本地 MySQL，默认账号是 `shopkeeper-agent` / `123456`。
+先把 [docker/mysql/meta.sql](docker/mysql/meta.sql) 和 [docker/mysql/dw.sql](docker/mysql/dw.sql) 导入本地 MySQL。这里的 `docker/mysql` 只是初始化 SQL 文件，不要求使用 Docker，默认账号是 `shopkeeper-agent` / `123456`。
 
-如果你已经把 Qdrant、Elasticsearch、Embedding 和大模型服务都接好了，可以在 `.env` 里加上 `SHOPKEEPER_DEMO_MODE=false`，让项目优先走完整链路。
+复制 `.env.example` 为 `.env`，确认以下配置保持为本地完整模式：
 
-### 5. 构建元数据知识库
+```env
+SHOPKEEPER_DEMO_MODE=false
+SHOPKEEPER_LOCAL_MODE=true
+EMBEDDING_MODEL_PATH=docker/embedding/bge-large-zh-v1.5
+```
+
+项目仓库不会提交体积较大的模型文件。可以从 [BAAI/bge-large-zh-v1.5](https://huggingface.co/BAAI/bge-large-zh-v1.5) 下载后放到 `EMBEDDING_MODEL_PATH` 指定的目录。
+
+### 5. 构建本地知识库
 
 ```bash
 uv run python -m app.scripts.build_meta_knowledge -c conf/meta_config.yaml
 ```
+
+这一步会从 `dw` 读取真实表结构和字段值，将结构化元数据写入 `meta`，并生成 `.local-data/qdrant` 和 `.local-data/value_index.json`。构建脚本可以重复执行。
 
 ### 6. 启动后端
 
@@ -154,6 +166,8 @@ pnpm dev
 
 默认前端通过 `/api` 代理到 `http://127.0.0.1:8001`。需要手动改地址时，调整 `frontend/.env` 里的 `VITE_DEV_PROXY_TARGET` 或 `VITE_API_BASE_URL`。完整模式下不提供公网认证能力，建议仅在本地或受保护网络中运行。
 
+如果需要连接独立的 Qdrant、Elasticsearch 和 Embedding 服务，将 `SHOPKEEPER_LOCAL_MODE` 设置为 `false`，并按 `conf/app_config.yaml` 配置对应地址。
+
 ## 数据库说明
 
 当前配置使用本地 MySQL。
@@ -168,6 +182,6 @@ Navicat 里直接连本机 `3306` 就能看到这两个库。
 
 ## 项目现状
 
-当前版本已经打通本地 MySQL、元数据构建、问数链路、查询历史、前端三栏工作台、图表和结果表格。完整模式依赖缺失时会在启动阶段明确报错，不会自动降级到演示链路。
+当前版本已经打通本地 MySQL、元数据构建、本地向量检索、字段值检索、问数链路、查询历史、前端三栏工作台、图表和结果表格。完整模式依赖缺失时会在启动阶段明确报错，不会自动降级到演示链路。
 
-当前验证状态：后端 `pytest` 通过 7 项，Ruff 检查通过，Python 编译检查通过，前端 TypeScript 检查和生产构建通过。项目适合本地演示和二次开发；当前未配置登录鉴权，不建议直接部署到公网。
+当前验证状态：后端 `pytest` 通过 21 项，Ruff 检查通过，Python 编译检查通过，前端 TypeScript 检查和生产构建通过，并已验证本地完整链路可以生成 SQL、查询 `dw` 并通过 SSE 返回结果。项目适合本地演示和二次开发；当前未配置登录鉴权，不建议直接部署到公网。

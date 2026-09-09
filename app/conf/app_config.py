@@ -67,6 +67,7 @@ class EmbeddingConfig:
     host: str
     port: int
     model: str
+    model_path: str
 
 
 @dataclass
@@ -92,6 +93,8 @@ class AppConfig:
     """项目级总配置入口"""
 
     demo_mode: bool
+    local_mode: bool
+    local_data_dir: str
     logging: LoggingConfig
     db_meta: DBConfig
     db_dw: DBConfig
@@ -104,6 +107,13 @@ class AppConfig:
 # 从当前文件位置回到项目根目录，再定位到 conf/app_config.yaml
 project_root = Path(__file__).parents[2]
 config_file = project_root / "conf" / "app_config.yaml"
+
+
+def resolve_project_path(value: str) -> Path:
+    """把配置中的相对路径统一解析到项目根目录。"""
+
+    path = Path(value)
+    return path if path.is_absolute() else project_root / path
 
 # 先读取本地 .env，让 YAML 中的 ${oc.env:...} 可以解析到敏感配置
 load_dotenv(project_root / ".env")

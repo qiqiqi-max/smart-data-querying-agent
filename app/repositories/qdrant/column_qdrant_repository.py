@@ -33,6 +33,13 @@ class ColumnQdrantRepository:
                 ),
             )
 
+    async def reset_collection(self):
+        """重建字段向量集合，避免重复构建留下过期向量。"""
+
+        if await self.client.collection_exists(self.collection_name):
+            await self.client.delete_collection(self.collection_name)
+        await self.ensure_collection()
+
     async def upsert(
         self,
         ids: list[str],
