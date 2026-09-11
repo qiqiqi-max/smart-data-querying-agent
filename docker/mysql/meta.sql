@@ -1,6 +1,7 @@
 SET NAMES utf8mb4;
 CREATE DATABASE meta DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
-GRANT ALL PRIVILEGES ON meta.* TO 'shopkeeper-agent'@'%';
+CREATE USER IF NOT EXISTS 'smart-data-querying-agent'@'%' IDENTIFIED BY '123456';
+GRANT ALL PRIVILEGES ON meta.* TO 'smart-data-querying-agent'@'%';
 
 USE meta;
 

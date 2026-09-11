@@ -1,7 +1,7 @@
 [project]
 name = "smart-data-querying-agent"
 version = "0.1.0"
-description = "电商问数智能数据分析 Agent"
+description = "基于自然语言查询电商数仓的智能问数 Agent"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [

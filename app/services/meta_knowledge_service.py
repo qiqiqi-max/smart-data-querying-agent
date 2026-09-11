@@ -33,6 +33,8 @@ from app.repositories.mysql.meta.meta_mysql_repository import MetaMySQLRepositor
 from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
 from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
 
+KNOWLEDGE_POINT_NAMESPACE = "smart-data-querying-agent"
+
 
 class MetaKnowledgeService:
     """负责串联元数据知识库构建流程的应用服务"""
@@ -130,7 +132,7 @@ class MetaKnowledgeService:
                 {
                     "id": uuid.uuid5(
                         uuid.NAMESPACE_URL,
-                        f"shopkeeper-agent:column:{column_info.id}:name",
+                        f"{KNOWLEDGE_POINT_NAMESPACE}:column:{column_info.id}:name",
                     ),
                     "embedding_text": column_info.name,
                     "payload": asdict(column_info),
@@ -141,7 +143,7 @@ class MetaKnowledgeService:
                 {
                     "id": uuid.uuid5(
                         uuid.NAMESPACE_URL,
-                        f"shopkeeper-agent:column:{column_info.id}:description",
+                        f"{KNOWLEDGE_POINT_NAMESPACE}:column:{column_info.id}:description",
                     ),
                     "embedding_text": column_info.description,
                     "payload": asdict(column_info),
@@ -153,7 +155,7 @@ class MetaKnowledgeService:
                     {
                         "id": uuid.uuid5(
                             uuid.NAMESPACE_URL,
-                            f"shopkeeper-agent:column:{column_info.id}:alias:{alia}",
+                            f"{KNOWLEDGE_POINT_NAMESPACE}:column:{column_info.id}:alias:{alia}",
                         ),
                         "embedding_text": alia,
                         "payload": asdict(column_info),
@@ -262,7 +264,7 @@ class MetaKnowledgeService:
                 {
                     "id": uuid.uuid5(
                         uuid.NAMESPACE_URL,
-                        f"shopkeeper-agent:metric:{metric_info.id}:name",
+                        f"{KNOWLEDGE_POINT_NAMESPACE}:metric:{metric_info.id}:name",
                     ),
                     "embedding_text": metric_info.name,
                     "payload": asdict(metric_info),
@@ -273,7 +275,7 @@ class MetaKnowledgeService:
                 {
                     "id": uuid.uuid5(
                         uuid.NAMESPACE_URL,
-                        f"shopkeeper-agent:metric:{metric_info.id}:description",
+                        f"{KNOWLEDGE_POINT_NAMESPACE}:metric:{metric_info.id}:description",
                     ),
                     "embedding_text": metric_info.description,
                     "payload": asdict(metric_info),
@@ -285,7 +287,7 @@ class MetaKnowledgeService:
                     {
                         "id": uuid.uuid5(
                             uuid.NAMESPACE_URL,
-                            f"shopkeeper-agent:metric:{metric_info.id}:alias:{alia}",
+                            f"{KNOWLEDGE_POINT_NAMESPACE}:metric:{metric_info.id}:alias:{alia}",
                         ),
                         "embedding_text": alia,
                         "payload": asdict(metric_info),

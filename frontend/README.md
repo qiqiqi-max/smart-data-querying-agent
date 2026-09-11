@@ -23,7 +23,7 @@ pnpm install
 pnpm dev
 ```
 
-默认开发代理会把 `/api` 转发到 `http://127.0.0.1:8000`，对应后端的 `POST /api/query` SSE 接口。
+默认开发代理会把 `/api` 转发到 `http://127.0.0.1:8001`，对应后端的 `POST /api/query` SSE 接口。
 
 如需修改后端地址：
 
@@ -34,11 +34,11 @@ cp .env.example .env
 然后调整：
 
 ```bash
-VITE_DEV_PROXY_TARGET=http://127.0.0.1:8000
+VITE_DEV_PROXY_TARGET=http://127.0.0.1:8001
 ```
 
 如果前端与后端不在同一域部署，可设置：
 
 ```bash
-VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_API_BASE_URL=http://127.0.0.1:8001
 ```

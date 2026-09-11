@@ -20,6 +20,8 @@
 
 ![电商问数查询结果页，展示 LangGraph 执行流程和查询结果表格](docs/images/smart-data-querying-agent-query-result.jpg)
 
+![Smart Data Querying Agent 系统架构](docs/images/smart-data-querying-agent-system-architecture.svg)
+
 ## 项目简介
 
 这个项目面向电商数据分析场景，解决业务人员查询数据时需要依赖 SQL 和数据开发的问题。用户输入自然语言问题，系统根据元数据和字段取值生成查询上下文，再生成经过安全校验的 SQL，从 MySQL 数仓返回结果。
@@ -58,7 +60,7 @@
 - 历史追踪: 查询记录持久化到 MySQL，右侧面板可查看最近分析。
 - 历史管理: 支持打开历史结果和删除单条查询记录，运行中的任务不会被误删。
 - 数据落地: 元数据库和教学数仓都接到本地 MySQL，Navicat 里可以直接看 `meta` 和 `dw` 两个库。
-- 运行模式: 默认配置为完整 API 模式；只有显式设置 `SHOPKEEPER_DEMO_MODE=true` 时才启用本地演示链路。
+- 运行模式: 默认配置为完整 API 模式；只有显式设置 `SMART_DATA_QUERYING_AGENT_DEMO_MODE=true` 时才启用本地演示链路。
 - 安全边界: SQL 经过 `sqlglot` AST 解析和 MySQL `EXPLAIN` 双重校验，只允许单条只读 `SELECT`。
 - 纠错闭环: SQL 校验失败后最多自动修正 2 次，每次修正都会重新经过 AST 和 `EXPLAIN` 校验，超过上限则明确失败。
 - 稳定性: 查询设置服务端超时，启动时检查外部依赖，并清理遗留的运行中历史记录。
@@ -95,7 +97,7 @@ smart-data-querying-agent/
 
 ## 本地运行
 
-项目默认使用完整 API 模式和本地原生模式，不需要 Docker。真实数据来自本地 MySQL，字段和指标向量写入本地嵌入式 Qdrant，字段取值写入本地索引文件，Embedding 直接加载本地 BGE 模型，大模型使用兼容 OpenAI 的 API。`SHOPKEEPER_DEMO_MODE` 默认保持关闭；只有显式设置为 `true` 才会进入演示链路。
+项目默认使用完整 API 模式和本地原生模式，不需要 Docker。真实数据来自本地 MySQL，字段和指标向量写入本地嵌入式 Qdrant，字段取值写入本地索引文件，Embedding 直接加载本地 BGE 模型，大模型使用兼容 OpenAI 的 API。`SMART_DATA_QUERYING_AGENT_DEMO_MODE` 默认保持关闭；只有显式设置为 `true` 才会进入演示链路。
 
 ### API 接口
 
@@ -130,13 +132,13 @@ uv sync
 
 ### 4. 准备本地数据库
 
-先把 [docker/mysql/meta.sql](docker/mysql/meta.sql) 和 [docker/mysql/dw.sql](docker/mysql/dw.sql) 导入本地 MySQL。这里的 `docker/mysql` 只是初始化 SQL 文件，不要求使用 Docker，默认账号是 `shopkeeper-agent` / `123456`。
+先把 [docker/mysql/meta.sql](docker/mysql/meta.sql) 和 [docker/mysql/dw.sql](docker/mysql/dw.sql) 导入本地 MySQL。这里的 `docker/mysql` 只是初始化 SQL 文件，不要求使用 Docker，默认账号是 `smart-data-querying-agent` / `123456`。
 
 复制 `.env.example` 为 `.env`，确认以下配置保持为本地完整模式：
 
 ```env
-SHOPKEEPER_DEMO_MODE=false
-SHOPKEEPER_LOCAL_MODE=true
+SMART_DATA_QUERYING_AGENT_DEMO_MODE=false
+SMART_DATA_QUERYING_AGENT_LOCAL_MODE=true
 EMBEDDING_MODEL_PATH=docker/embedding/bge-large-zh-v1.5
 ```
 
@@ -166,7 +168,7 @@ pnpm dev
 
 默认前端通过 `/api` 代理到 `http://127.0.0.1:8001`。需要手动改地址时，调整 `frontend/.env` 里的 `VITE_DEV_PROXY_TARGET` 或 `VITE_API_BASE_URL`。完整模式下不提供公网认证能力，建议仅在本地或受保护网络中运行。
 
-如果需要连接独立的 Qdrant、Elasticsearch 和 Embedding 服务，将 `SHOPKEEPER_LOCAL_MODE` 设置为 `false`，并按 `conf/app_config.yaml` 配置对应地址。
+如果需要连接独立的 Qdrant、Elasticsearch 和 Embedding 服务，将 `SMART_DATA_QUERYING_AGENT_LOCAL_MODE` 设置为 `false`，并按 `conf/app_config.yaml` 配置对应地址。
 
 ## 数据库说明
 
@@ -175,7 +177,7 @@ pnpm dev
 - 元数据库: `meta`
 - 教学数仓: `dw`
 - 查询历史表: `meta.query_history`
-- 账号: `shopkeeper-agent`
+- 账号: `smart-data-querying-agent`
 - 密码: `123456`
 
 Navicat 里直接连本机 `3306` 就能看到这两个库。
