@@ -63,5 +63,5 @@ testem.log
 .DS_Store
 Thumbs.db
 
-# Local TEI embedding model files (large)
-docker/embedding/
+# Local embedding model files (large)
+models/

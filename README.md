@@ -91,13 +91,15 @@ smart-data-querying-agent/
 ├── docs/                 # 项目截图和架构图
 ├── frontend/             # React + Vite + Tailwind CSS 前端
 ├── prompts/              # SQL 生成、修正和过滤模板
+├── sql/                  # meta 和 dw 数据库初始化脚本
+├── models/               # 本地 BGE 模型目录（不提交到仓库）
 ├── main.py               # FastAPI 应用入口
 └── pyproject.toml        # Python 依赖和工具配置
 ```
 
 ## 本地运行
 
-项目默认使用完整 API 模式和本地原生模式，不需要 Docker。真实数据来自本地 MySQL，字段和指标向量写入本地嵌入式 Qdrant，字段取值写入本地索引文件，Embedding 直接加载本地 BGE 模型，大模型使用兼容 OpenAI 的 API。`SMART_DATA_QUERYING_AGENT_DEMO_MODE` 默认保持关闭；只有显式设置为 `true` 才会进入演示链路。
+项目默认使用完整 API 模式和本地原生模式，所有组件都直接运行在本机，不依赖容器环境。真实数据来自本地 MySQL，字段和指标向量写入本地嵌入式 Qdrant，字段取值写入本地索引文件，Embedding 直接加载本地 BGE 模型，大模型使用兼容 OpenAI 的 API。`SMART_DATA_QUERYING_AGENT_DEMO_MODE` 默认保持关闭；只有显式设置为 `true` 才会进入演示链路。
 
 ### API 接口
 
@@ -115,7 +117,7 @@ smart-data-querying-agent/
 - `uv`
 - Node.js
 - `pnpm`
-- 本地 BGE 模型文件（默认路径为 `docker/embedding/bge-large-zh-v1.5`）
+- 本地 BGE 模型文件（默认路径为 `models/bge-large-zh-v1.5`）
 
 ### 2. 克隆项目
 
@@ -132,14 +134,21 @@ uv sync
 
 ### 4. 准备本地数据库
 
-先把 [docker/mysql/meta.sql](docker/mysql/meta.sql) 和 [docker/mysql/dw.sql](docker/mysql/dw.sql) 导入本地 MySQL。这里的 `docker/mysql` 只是初始化 SQL 文件，不要求使用 Docker，默认账号是 `smart-data-querying-agent` / `123456`。
+先把 [sql/meta.sql](sql/meta.sql) 和 [sql/dw.sql](sql/dw.sql) 导入本地 MySQL。脚本会创建 `meta`、`dw` 两个库和项目专属账号 `smart-data-querying-agent` / `123456`，需要使用有建库和授权权限的账号执行：
+
+```bash
+mysql -u root -p < sql/meta.sql
+mysql -u root -p < sql/dw.sql
+```
+
+也可以在 Navicat 中连接本机 MySQL 后依次运行这两个 SQL 文件。
 
 复制 `.env.example` 为 `.env`，确认以下配置保持为本地完整模式：
 
 ```env
 SMART_DATA_QUERYING_AGENT_DEMO_MODE=false
 SMART_DATA_QUERYING_AGENT_LOCAL_MODE=true
-EMBEDDING_MODEL_PATH=docker/embedding/bge-large-zh-v1.5
+EMBEDDING_MODEL_PATH=models/bge-large-zh-v1.5
 ```
 
 项目仓库不会提交体积较大的模型文件。可以从 [BAAI/bge-large-zh-v1.5](https://huggingface.co/BAAI/bge-large-zh-v1.5) 下载后放到 `EMBEDDING_MODEL_PATH` 指定的目录。

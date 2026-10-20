@@ -36,7 +36,7 @@ embedding:
   host: 127.0.0.1
   port: 8081
   model: BAAI/bge-large-zh-v1.5
-  model_path: ${oc.env:EMBEDDING_MODEL_PATH,docker/embedding/bge-large-zh-v1.5}
+  model_path: ${oc.env:EMBEDDING_MODEL_PATH,models/bge-large-zh-v1.5}
 
 es:
   host: 127.0.0.1

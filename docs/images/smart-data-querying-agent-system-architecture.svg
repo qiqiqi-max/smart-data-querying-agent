@@ -184,5 +184,5 @@
 
   <text x="58" y="538" class="small">构建链路：从教学数仓读取表结构和值域，根据配置写入 Meta MySQL、Qdrant 和 Elasticsearch</text>
   <text x="58" y="790" class="small">查询链路：Jieba 先抽取关键词；LangChain/LLM 扩展检索词和生成 SQL；SQLAlchemy 校验执行；自定义 stream 事件推给 SSE</text>
-  <text x="58" y="934" class="small">工程依赖：后端用 uv 管理 Python 环境，前端用 pnpm 管理依赖，基础服务可通过 Docker Compose 启动</text>
+  <text x="58" y="934" class="small">工程依赖：后端用 uv 管理 Python 环境，前端用 pnpm 管理依赖，MySQL、Qdrant 和 Embedding 均以本地原生方式运行</text>
 </svg>
