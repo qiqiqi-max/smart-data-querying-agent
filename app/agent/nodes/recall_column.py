@@ -6,6 +6,8 @@
 本章的主线是：关键词扩展 -> Embedding -> Qdrant 相似度检索 -> ColumnInfo 去重
 """
 
+import asyncio
+
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
 from langgraph.runtime import Runtime
@@ -49,14 +51,21 @@ async def recall_column(state: DataAgentState, runtime: Runtime[DataAgentContext
         # 原始关键词和 LLM 扩展词一起参与召回，保序去重以保证请求顺序稳定
         keywords = dedupe_preserve_order([*keywords, *result])
 
+        # 查询词必须先转成向量，才能和第 9 章写入 Qdrant 的字段向量做相似度检索
+        # 所有关键词合并成一次批量 Embedding，只做一次模型前向计算
+        # 关键词为空时不发起请求，远程 Embedding 服务不一定接受空批次
+        embeddings = (
+            await embedding_client.aembed_documents(keywords) if keywords else []
+        )
+        # 各关键词的检索互不依赖，并发执行；gather 按入参顺序返回结果
+        search_results: list[list[ColumnInfo]] = await asyncio.gather(
+            *(column_qdrant_repository.search(embedding) for embedding in embeddings)
+        )
+
         # 用字段 id 做唯一键，因为多个关键词、同一字段的多个向量点都可能命中同一个字段
+        # 按关键词顺序、再按命中顺序写入，保留首次出现的字段
         column_info_map: dict[str, ColumnInfo] = {}
-        for keyword in keywords:
-            # 查询词必须先转成向量，才能和第 9 章写入 Qdrant 的字段向量做相似度检索
-            embedding = await embedding_client.aembed_query(keyword)
-            current_column_infos: list[
-                ColumnInfo
-            ] = await column_qdrant_repository.search(embedding)
+        for current_column_infos in search_results:
             for column_info in current_column_infos:
                 if column_info.id not in column_info_map:
                     column_info_map[column_info.id] = column_info

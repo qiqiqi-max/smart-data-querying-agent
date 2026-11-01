@@ -66,6 +66,8 @@ class LocalEmbeddingClient:
         if not texts:
             return []
 
+        # 锁有意覆盖整个推理：fast tokenizer 并发调用不安全，且 CPU 上多个前向计算
+        # 会争抢同一组 torch 线程，实测并发反而更慢；调用方应合并成一次批量请求
         with self._load_lock:
             self._load_model()
             torch = self._torch
