@@ -16,10 +16,10 @@ class _FakeHistoryRepository:
     async def create(self, history_id, query):
         self.history_id = history_id
 
-    async def mark_done(self, history_id, result, summary):
+    async def mark_done(self, history_id, result, summary, sql=None):
         self.summaries.append(summary)
 
-    async def mark_error(self, history_id, message):
+    async def mark_error(self, history_id, message, sql=None):
         self.errors.append(message)
 
 

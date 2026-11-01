@@ -22,3 +22,4 @@ class QueryHistoryItem(BaseModel):
     error: str | None
     created_at: datetime
     updated_at: datetime
+    sql: str | None = None

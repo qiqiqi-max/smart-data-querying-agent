@@ -29,6 +29,8 @@ class QueryHistoryMySQL(Base):
         Integer, default=0, nullable=False, comment="结果行数"
     )
     error: Mapped[str | None] = mapped_column(Text, comment="错误信息")
+    # 新增列：已有表由 lifespan 启动时的 ensure_query_history_columns 自动补齐
+    sql: Mapped[str | None] = mapped_column(Text, comment="最终执行或最后校验的 SQL")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False, comment="创建时间"
     )

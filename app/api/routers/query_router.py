@@ -79,6 +79,7 @@ async def query_history_handler(
             result=history.result,
             row_count=history.row_count,
             error=history.error,
+            sql=history.sql,
             created_at=history.created_at,
             updated_at=history.updated_at,
         )

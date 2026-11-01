@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import desc, select, update
+from sqlalchemy import Connection, desc, inspect, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.entities.query_history import QueryHistory
@@ -17,6 +17,34 @@ from app.services.result_summary import count_result_rows
 
 # running 状态超过该时长仍未更新，视为服务重启或连接中断遗留的记录
 RUNNING_STALE_MINUTES = 10
+
+
+def ensure_query_history_columns(connection: Connection) -> list[str]:
+    """给已存在的 query_history 表补齐后来新增的可空列，返回本次补上的列名。
+
+    create(checkfirst=True) 只会建新表，不会给旧表加列，所以启动时在这里做一次轻量迁移。
+    """
+    table = QueryHistoryMySQL.__table__
+    existing = {
+        column["name"] for column in inspect(connection).get_columns(table.name)
+    }
+    preparer = connection.dialect.identifier_preparer
+    added: list[str] = []
+    for column in table.columns:
+        if column.name in existing:
+            continue
+        if not column.nullable:
+            # 非空列需要默认值或数据回填，不能自动补，交给人工迁移
+            raise RuntimeError(f"query_history 缺少非空列 {column.name}，请手动迁移")
+        column_type = column.type.compile(dialect=connection.dialect)
+        connection.execute(
+            text(
+                f"ALTER TABLE {preparer.quote(table.name)} "
+                f"ADD COLUMN {preparer.quote(column.name)} {column_type}"
+            )
+        )
+        added.append(column.name)
+    return added
 
 
 class QueryHistoryRunningError(Exception):
@@ -62,8 +90,10 @@ class QueryHistoryRepository:
         await self.session.refresh(model)
         return self.to_entity(model)
 
-    async def mark_done(self, history_id: str, result: object, summary: str):
-        """把问数记录标记为成功，并保存结构化结果"""
+    async def mark_done(
+        self, history_id: str, result: object, summary: str, sql: str | None = None
+    ):
+        """把问数记录标记为成功，并保存结构化结果和执行的 SQL"""
 
         model = await self.session.get(QueryHistoryMySQL, history_id)
         if not model:
@@ -74,6 +104,7 @@ class QueryHistoryRepository:
         model.result = self._json_safe(result)
         model.row_count = count_result_rows(result)
         model.error = None
+        model.sql = sql
         model.updated_at = datetime.now()
         try:
             await self.session.commit()
@@ -81,8 +112,8 @@ class QueryHistoryRepository:
             await self.session.rollback()
             raise
 
-    async def mark_error(self, history_id: str, message: str):
-        """把问数记录标记为失败"""
+    async def mark_error(self, history_id: str, message: str, sql: str | None = None):
+        """把问数记录标记为失败，sql 为空时保留已有值"""
 
         model = await self.session.get(QueryHistoryMySQL, history_id)
         if not model:
@@ -91,6 +122,8 @@ class QueryHistoryRepository:
         model.status = "error"
         model.summary = message
         model.error = message
+        if sql is not None:
+            model.sql = sql
         model.updated_at = datetime.now()
         try:
             await self.session.commit()
@@ -172,6 +205,7 @@ class QueryHistoryRepository:
             result=model.result,
             row_count=model.row_count,
             error=model.error,
+            sql=model.sql,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )

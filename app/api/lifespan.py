@@ -21,7 +21,10 @@ from app.conf.app_config import app_config
 from app.core.log import logger
 from app.models.query_history import QueryHistoryMySQL
 from app.repositories.es.value_es_repository import ValueESRepository
-from app.repositories.mysql.meta.query_history_repository import QueryHistoryRepository
+from app.repositories.mysql.meta.query_history_repository import (
+    QueryHistoryRepository,
+    ensure_query_history_columns,
+)
 from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
 from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
 
@@ -52,6 +55,10 @@ async def lifespan(app: FastAPI):
             await connection.run_sync(
                 QueryHistoryMySQL.__table__.create, checkfirst=True
             )
+            # 旧表不会被 create 加列，这里补齐后来新增的可空列
+            added = await connection.run_sync(ensure_query_history_columns)
+            if added:
+                logger.info("query_history 已补齐新列：{}", ", ".join(added))
 
         async with meta_mysql_client_manager.session_factory() as session:
             await QueryHistoryRepository(session).mark_stale_running()

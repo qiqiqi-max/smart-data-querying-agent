@@ -19,6 +19,9 @@ async def fail_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]):
             "message": message,
         }
     )
-    runtime.stream_writer({"type": "error", "message": message})
+    # 带上最后一次未通过校验的 SQL，方便在前端和历史记录里排查
+    runtime.stream_writer(
+        {"type": "error", "message": message, "sql": state.get("sql")}
+    )
     logger.error("SQL 校验达到最大修正次数：{}", message)
     return {"error": message}

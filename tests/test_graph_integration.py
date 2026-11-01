@@ -230,7 +230,12 @@ def test_graph_happy_path_runs_every_node_and_returns_rows(monkeypatch):
         assert (step, "success") in progress
     assert "correct_sql" not in calls.prompts
     assert progress[-1] == ("执行SQL", "success")
-    assert events[-1] == {"type": "result", "data": ROWS, "truncated": False}
+    assert events[-1] == {
+        "type": "result",
+        "data": ROWS,
+        "truncated": False,
+        "sql": GENERATED_SQL,
+    }
 
     # 生成节点去掉了代码块围栏，校验和执行拿到的是同一条 SQL
     assert dw_repository.validated == [GENERATED_SQL]
@@ -289,7 +294,12 @@ def test_graph_stops_after_max_corrections_without_running_sql(monkeypatch):
     assert len(dw_repository.validated) == max_corrections + 1
     assert dw_repository.ran == []
     assert state["sql_retry_count"] == max_corrections
-    assert events[-1] == {"type": "error", "message": "bad sql 3"}
+    # 失败事件带上最后一次未通过校验的 SQL，便于排查
+    assert events[-1] == {
+        "type": "error",
+        "message": "bad sql 3",
+        "sql": "SELECT broken",
+    }
     assert ("SQL校验失败", "error") in _progress(events)
     assert not any(event["type"] == "result" for event in events)
 
@@ -316,10 +326,10 @@ class _FakeHistoryRepository:
     async def create(self, history_id, query):
         pass
 
-    async def mark_done(self, history_id, result, summary):
-        self.done.append((result, summary))
+    async def mark_done(self, history_id, result, summary, sql=None):
+        self.done.append((result, summary, sql))
 
-    async def mark_error(self, history_id, message):
+    async def mark_error(self, history_id, message, sql=None):
         self.errors.append(message)
 
 
@@ -349,8 +359,13 @@ def test_query_service_streams_graph_events_as_sse(monkeypatch):
         chunk.startswith("data: ") and chunk.endswith("\n\n") for chunk in chunks
     )
     events = [json.loads(chunk.removeprefix("data: ")) for chunk in chunks]
-    assert events[-1] == {"type": "result", "data": ROWS, "truncated": False}
-    assert history_repository.done == [(ROWS, "查询完成，共 1 行结果。")]
+    assert events[-1] == {
+        "type": "result",
+        "data": ROWS,
+        "truncated": False,
+        "sql": GENERATED_SQL,
+    }
+    assert history_repository.done == [(ROWS, "查询完成，共 1 行结果。", GENERATED_SQL)]
     assert history_repository.errors == []
 
 

@@ -28,8 +28,8 @@ async def run_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]):
         result, truncated = await dw_mysql_repository.run(sql)
         logger.info(f"SQL执行结果：{result}，是否截断：{truncated}")
         writer({"type": "progress", "step": step, "status": "success"})
-        # truncated 是附加字段，data 仍是结果行列表，兼容前端表格和历史记录
-        writer({"type": "result", "data": result, "truncated": truncated})
+        # truncated 和 sql 是附加字段，data 仍是结果行列表，兼容前端表格和历史记录
+        writer({"type": "result", "data": result, "truncated": truncated, "sql": sql})
 
     except Exception as e:
         logger.error(f"{step} failed: {e}")

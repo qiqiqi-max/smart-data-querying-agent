@@ -135,12 +135,14 @@ class QueryService:
                             data, truncated=bool(chunk.get("truncated"))
                         )
                         await self.query_history_repository.mark_done(
-                            history_id, data, summary
+                            history_id, data, summary, sql=chunk.get("sql")
                         )
                     elif chunk.get("type") == "error":
                         has_error = True
                         await self.query_history_repository.mark_error(
-                            history_id, str(chunk.get("message", "查询失败"))
+                            history_id,
+                            str(chunk.get("message", "查询失败")),
+                            sql=chunk.get("sql"),
                         )
 
                     # SSE 要求每条消息以 data: 开头，并以两个换行符结束
