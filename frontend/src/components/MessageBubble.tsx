@@ -1,91 +1,76 @@
 /**
- * 聊天消息气泡组件
- * 组合展示用户问题、智能体回复、执行流程和结果表格
+ * 聊天消息组件
+ * 用户问题显示为右侧气泡；智能体回答显示为卡片，包含摘要、执行轨迹和结果面板
  */
-import { Bot, Copy, UserRound } from "lucide-react";
-import { ResultChart } from "./ResultChart";
-import { ResultTable } from "./ResultTable";
-import { StepRail } from "./StepRail";
-import { cn, formatTime, toClipboardText } from "../lib/format";
+import { Bot } from "lucide-react";
+import { cn, formatTime } from "../lib/format";
 import type { ChatMessage } from "../types/agent";
+import { ResultPanel } from "./ResultPanel";
+import { SqlBlock } from "./SqlBlock";
+import { StepRail } from "./StepRail";
 
 export function MessageBubble({ message }: { message: ChatMessage }) {
-  const isUser = message.role === "user";
+  if (message.role === "user") {
+    return (
+      <article className="flex flex-col items-end">
+        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-slate-900 px-4 py-2.5 text-[15px] leading-7 text-white">
+          {message.content}
+        </div>
+        <div className="mt-1 pr-1 text-[11px] text-slate-400">{formatTime(message.createdAt)}</div>
+      </article>
+    );
+  }
 
-  const copy = async () => {
-    const text = message.result ? toClipboardText(message.result) : message.content;
-    await navigator.clipboard.writeText(text);
-  };
+  const failedWithSql = message.status === "error" && message.sql && message.result === undefined;
 
   return (
-    <article className={cn("group flex gap-3", isUser && "justify-end")}>
-      {!isUser && (
-        <div className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-slate-900">
+    <article className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-card sm:px-5">
+      <div className="flex items-center gap-2">
+        <div className="grid h-7 w-7 place-items-center rounded-full bg-moss/10 text-moss">
           <Bot className="h-4 w-4" aria-hidden="true" />
+        </div>
+        <span className="text-sm font-medium text-slate-900">问数助手</span>
+        <span className="ml-auto text-[11px] text-slate-400">{formatTime(message.createdAt)}</span>
+      </div>
+
+      <p
+        className={cn(
+          "mt-3 whitespace-pre-wrap text-[15px] leading-7",
+          message.status === "stopped" ? "text-slate-500" : "text-slate-800",
+        )}
+      >
+        {message.content}
+      </p>
+
+      {message.error && (
+        <div className="mt-3 rounded-lg border border-tomato/20 bg-tomato/5 px-3 py-2 text-sm text-tomato">
+          {message.error}
         </div>
       )}
 
-      <div className={cn("max-w-[920px] flex-1", isUser && "flex max-w-[760px] justify-end")}>
-        <div
-          className={cn(
-            "relative max-w-full border px-4 py-4",
-            isUser
-              ? "border-slate-900/80 bg-slate-900 text-white"
-              : "border-slate-200 bg-white/90 text-slate-900",
-          )}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div
-                className={cn(
-                  "mb-2 inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]",
-                  isUser ? "border-white/15 text-white/65" : "border-slate-200 text-slate-500",
-                )}
-              >
-                {isUser ? "you" : "agent"}
-              </div>
-              <p className="whitespace-pre-wrap text-[15px] leading-7">{message.content}</p>
-            </div>
-            {!isUser && message.status !== "streaming" && (
-              <button
-                type="button"
-                onClick={copy}
-                className="shrink-0 rounded-full p-1.5 text-slate-400 opacity-0 outline-none transition hover:bg-slate-100 hover:text-slate-700 focus:opacity-100 focus:ring-2 focus:ring-moss/30 group-hover:opacity-100"
-                title="复制"
-                aria-label="复制"
-              >
-                <Copy className="h-4 w-4" aria-hidden="true" />
-              </button>
-            )}
-          </div>
+      <StepRail
+        steps={message.steps}
+        status={message.status}
+        startedAt={message.createdAt}
+        finishedAt={message.finishedAt}
+      />
 
-          {message.error && (
-            <div className="mt-3 border border-tomato/20 bg-tomato/10 px-3 py-2 text-sm text-tomato">
-              {message.error}
-            </div>
-          )}
+      {message.result !== undefined && (
+        <ResultPanel
+          data={message.result}
+          truncated={message.truncated}
+          sql={message.sql}
+          query={message.query}
+        />
+      )}
 
-          {!isUser && <StepRail steps={message.steps} stopped={message.status === "stopped"} />}
-          {!isUser && message.result !== undefined && <ResultChart data={message.result} />}
-          {!isUser && message.result !== undefined && (
-            <ResultTable data={message.result} truncated={message.truncated} />
-          )}
-
-          <div
-            className={cn(
-              "mt-3 text-xs",
-              isUser ? "text-white/55" : "text-slate-400",
-            )}
-          >
-            {formatTime(message.createdAt)}
-          </div>
-        </div>
-      </div>
-
-      {isUser && (
-        <div className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-moss text-white">
-          <UserRound className="h-4 w-4" aria-hidden="true" />
-        </div>
+      {failedWithSql && (
+        <details className="mt-3 overflow-hidden rounded-lg border border-slate-200">
+          <summary className="cursor-pointer select-none px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
+            查看最后一次生成的 SQL
+          </summary>
+          <SqlBlock sql={message.sql} />
+        </details>
       )}
     </article>
   );

@@ -1,21 +1,14 @@
 /**
  * 前端应用主组件
- * 负责会话状态、SSE 消费和三栏工作台布局
+ * 负责会话状态、SSE 消费和两栏工作台布局（左侧记录栏 + 右侧对话区，窄屏下记录栏为抽屉）
  */
-import {
-  Activity,
-  BarChart3,
-  Eraser,
-  History,
-  Leaf,
-  MessageSquarePlus,
-  Server,
-} from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Eraser, Menu } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Composer } from "./components/Composer";
 import { EmptyState } from "./components/EmptyState";
 import { MessageBubble } from "./components/MessageBubble";
-import { SessionRail } from "./components/SessionRail";
+import { ResultPanel } from "./components/ResultPanel";
+import { Sidebar } from "./components/Sidebar";
 import { deleteQueryHistory, fetchQueryHistory, streamQuery } from "./lib/agentApi";
 import { cn, countResultRows, isTruncatedSummary, summarizeResult } from "./lib/format";
 import type {
@@ -68,14 +61,7 @@ function historyToRun(history: QueryHistoryItem): RunSummary {
     rows: history.row_count,
     error: history.error ?? undefined,
     result: history.result,
-    activeStep:
-      history.status === "done"
-        ? "执行完成"
-        : history.status === "error"
-          ? "异常"
-          : history.status === "stopped"
-            ? "已停止"
-            : "运行中",
+    sql: history.sql ?? undefined,
   };
 }
 
@@ -97,22 +83,22 @@ function upsertRun(
         createdAt: patch.updatedAt ?? now,
         updatedAt: now,
         rows: patch.rows,
-        activeStep: patch.activeStep,
         error: patch.error,
         result: patch.result,
+        sql: patch.sql,
       };
 
   return [nextRun, ...runs.filter((run) => run.id !== runId)].slice(0, MAX_RECENT_RUNS);
 }
 
+// 同一步骤的 running 和 success 事件合并成一条，保留第一次出现的时间用于计算耗时
 function upsertStep(steps: StepState[] = [], event: Extract<AgentEvent, { type: "progress" }>) {
-  const next = steps.filter((item) => item.step !== event.step);
-  next.push({
-    step: event.step,
-    status: event.status,
-    updatedAt: Date.now(),
-  });
-  return next;
+  const now = Date.now();
+  const previous = steps.find((item) => item.step === event.step);
+  return [
+    ...steps.filter((item) => item.step !== event.step),
+    { step: event.step, status: event.status, startedAt: previous?.startedAt ?? now, updatedAt: now },
+  ];
 }
 
 export default function App() {
@@ -120,7 +106,11 @@ export default function App() {
   const [draft, setDraft] = useState("");
   const [activeController, setActiveController] = useState<AbortController | null>(null);
   const [recentRuns, setRecentRuns] = useState<RunSummary[]>(() => loadRecentRuns());
+  // 当前打开的历史记录，用于在侧边栏高亮
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const isStreaming = Boolean(activeController);
   const canSubmit = draft.trim().length > 0 && !isStreaming;
@@ -153,19 +143,14 @@ export default function App() {
     });
   }, [messages]);
 
-  const completedCount = useMemo(
-    () => recentRuns.filter((run) => run.status === "done").length,
-    [recentRuns],
-  );
-  const errorCount = useMemo(
-    () => recentRuns.filter((run) => run.status === "error").length,
-    [recentRuns],
-  );
-  const activeRun = useMemo(
-    () => recentRuns.find((run) => run.status === "running") ?? recentRuns[0] ?? null,
-    [recentRuns],
-  );
-  const activeStep = activeRun?.activeStep ?? "待开始";
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDrawerOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [drawerOpen]);
 
   const startQuery = async (rawQuery = draft) => {
     const query = rawQuery.trim();
@@ -173,100 +158,67 @@ export default function App() {
 
     const startedAt = Date.now();
     const runId = makeId();
-
-    const userMessage: ChatMessage = {
-      id: makeId(),
-      role: "user",
-      content: query,
-      createdAt: startedAt,
-    };
-
     const assistantId = makeId();
-    const assistantMessage: ChatMessage = {
-      id: assistantId,
-      role: "assistant",
-      content: "连接中...",
-      createdAt: startedAt,
-      status: "streaming",
-      steps: [],
-    };
 
     const controller = new AbortController();
     setActiveController(controller);
+    setActiveRunId(null);
     setDraft("");
-    setMessages((current) => [...current, userMessage, assistantMessage]);
-    setRecentRuns((current) =>
-      upsertRun(current, runId, {
+    setMessages((current) => [
+      ...current,
+      { id: makeId(), role: "user", content: query, createdAt: startedAt },
+      {
+        id: assistantId,
+        role: "assistant",
+        content: "正在理解问题…",
+        createdAt: startedAt,
+        status: "streaming",
+        steps: [],
         query,
-        status: "running",
-        summary: "连接中...",
-        activeStep: "连接中",
-        updatedAt: startedAt,
-      }),
+      },
+    ]);
+    setRecentRuns((current) =>
+      upsertRun(current, runId, { query, status: "running", summary: "连接中...", updatedAt: startedAt }),
     );
 
     const patchRun = (patch: Partial<Omit<RunSummary, "id" | "createdAt">>) => {
       setRecentRuns((current) => upsertRun(current, runId, patch));
     };
+    const patchAssistant = (patch: (message: ChatMessage) => Partial<ChatMessage>) => {
+      setMessages((current) =>
+        current.map((message) => (message.id === assistantId ? { ...message, ...patch(message) } : message)),
+      );
+    };
 
     const onEvent = (event: AgentEvent) => {
-      setMessages((current) =>
-        current.map((message) => {
-          if (message.id !== assistantId) return message;
-
-          if (event.type === "progress") {
-            return {
-              ...message,
-              content: event.status === "running" ? `正在执行：${event.step}` : message.content,
-              steps: upsertStep(message.steps, event),
-            };
-          }
-
-          if (event.type === "result") {
-            return {
-              ...message,
-              status: "done",
-              content: summarizeResult(event.data, event.truncated),
-              result: event.data,
-              truncated: event.truncated,
-            };
-          }
-
-          return {
-            ...message,
-            status: "error",
-            content: "这次查询没有成功。",
-            error: event.message,
-          };
-        }),
-      );
-
       if (event.type === "progress") {
-        patchRun({
-          status: event.status === "error" ? "error" : "running",
-          activeStep: event.step,
-          summary: `执行：${event.step}`,
-        });
+        patchAssistant((message) => ({ steps: upsertStep(message.steps, event) }));
+        patchRun({ status: event.status === "error" ? "error" : "running", summary: `执行：${event.step}` });
+        return;
       }
 
       if (event.type === "result") {
-        patchRun({
+        const summary = summarizeResult(event.data, event.truncated);
+        patchAssistant(() => ({
           status: "done",
-          summary: summarizeResult(event.data, event.truncated),
-          rows: countResultRows(event.data),
-          activeStep: "执行完成",
+          content: summary,
           result: event.data,
-        });
+          truncated: event.truncated,
+          sql: event.sql,
+          finishedAt: Date.now(),
+        }));
+        patchRun({ status: "done", summary, rows: countResultRows(event.data), result: event.data, sql: event.sql });
+        return;
       }
 
-      if (event.type === "error") {
-        patchRun({
-          status: "error",
-          summary: event.message,
-          error: event.message,
-          activeStep: "异常",
-        });
-      }
+      patchAssistant(() => ({
+        status: "error",
+        content: "这次查询没有成功。",
+        error: event.message,
+        sql: event.sql ?? undefined,
+        finishedAt: Date.now(),
+      }));
+      patchRun({ status: "error", summary: event.message, error: event.message });
     };
 
     try {
@@ -275,42 +227,26 @@ export default function App() {
       setMessages((current) =>
         current.map((message) =>
           message.id === assistantId && message.status === "streaming"
-            ? { ...message, status: "done", content: "流程已结束。" }
+            ? { ...message, status: "done", content: "流程已结束。", finishedAt: Date.now() }
             : message,
         ),
       );
     } catch (error) {
       const isAbort = error instanceof DOMException && error.name === "AbortError";
+      const message = error instanceof Error ? error.message : String(error);
 
-      setMessages((current) =>
-        current.map((message) =>
-          message.id === assistantId
-            ? {
-                ...message,
-                status: isAbort ? "stopped" : "error",
-                content: isAbort ? "已停止本次查询。" : "无法连接问数接口。",
-                error: isAbort ? undefined : error instanceof Error ? error.message : String(error),
-              }
-            : message,
-        ),
+      patchAssistant(() => ({
+        status: isAbort ? "stopped" : "error",
+        content: isAbort ? "已停止本次查询。" : "无法连接问数接口。",
+        error: isAbort ? undefined : message,
+        finishedAt: Date.now(),
+      }));
+      // 与后端 mark_interrupted 写入的 stopped 状态保持一致，刷新历史后不会跳变
+      patchRun(
+        isAbort
+          ? { status: "stopped", summary: "已停止本次查询。" }
+          : { status: "error", summary: message, error: message },
       );
-
-      if (isAbort) {
-        // 与后端 mark_interrupted 写入的 stopped 状态保持一致，刷新历史后不会跳变
-        patchRun({
-          status: "stopped",
-          summary: "已停止本次查询。",
-          activeStep: "已停止",
-        });
-      } else {
-        const message = error instanceof Error ? error.message : String(error);
-        patchRun({
-          status: "error",
-          summary: message,
-          error: message,
-          activeStep: "异常",
-        });
-      }
       await refreshHistory();
     } finally {
       setActiveController(null);
@@ -321,30 +257,37 @@ export default function App() {
     activeController?.abort();
   };
 
-  const clearConversation = () => {
+  const newChat = () => {
     if (isStreaming) return;
     setMessages([]);
     setDraft("");
+    setActiveRunId(null);
+    setDrawerOpen(false);
+  };
+
+  // 示例只填入输入框，用户可以先修改再发送
+  const fillExample = (example: string) => {
+    setDraft(example);
+    inputRef.current?.focus();
   };
 
   const openHistory = (run: RunSummary) => {
     if (isStreaming) return;
 
+    setActiveRunId(run.id);
+    setDrawerOpen(false);
     setMessages([
-      {
-        id: makeId(),
-        role: "user",
-        content: run.query,
-        createdAt: run.createdAt,
-      },
+      { id: makeId(), role: "user", content: run.query, createdAt: run.createdAt },
       {
         id: makeId(),
         role: "assistant",
         content: run.summary || (run.status === "error" ? "这次查询没有成功。" : "历史记录已打开。"),
         createdAt: run.updatedAt,
         status: run.status === "error" || run.status === "stopped" ? run.status : "done",
-        result: run.result,
+        result: run.result ?? undefined,
         truncated: isTruncatedSummary(run.summary),
+        sql: run.sql,
+        query: run.query,
         error: run.error,
       },
     ]);
@@ -356,203 +299,106 @@ export default function App() {
     try {
       await deleteQueryHistory(run.id);
       setRecentRuns((current) => current.filter((item) => item.id !== run.id));
+      if (run.id === activeRunId) setActiveRunId(null);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "删除失败，请稍后重试。");
     }
   };
 
+  const sidebarProps = {
+    apiBaseUrl: API_BASE_URL,
+    isStreaming,
+    recentRuns,
+    activeRunId,
+    onNewChat: newChat,
+    onOpenRun: openHistory,
+    onDeleteRun: deleteRun,
+  };
+
+  // 取最后一条助手消息
+  const lastAssistantMessage = messages.findLast(
+    (msg: ChatMessage) => msg.role === "assistant",
+  );
+
   return (
-    <div className="h-[100dvh] overflow-hidden bg-parchment text-ink">
-      <div className="relative grid h-[100dvh] min-w-0 overflow-hidden xl:grid-cols-[280px_minmax(0,1fr)_340px]">
-        <aside className="hidden min-h-0 border-r border-slate-200/90 bg-white/85 xl:flex xl:flex-col">
-          <div className="border-b border-slate-200 px-5 py-5">
-            <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center border border-slate-200 bg-slate-50 text-moss">
-                <BarChart3 className="h-5 w-5" aria-hidden="true" />
-              </div>
-              <div>
-                <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Workbench</div>
-                <div className="mt-1 text-base font-semibold text-slate-900">电商问数</div>
-              </div>
-            </div>
-            <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600">
-              <StatusDot active={isStreaming} />
-              {isStreaming ? "运行中" : "就绪"}
-            </div>
-          </div>
+    <div className="flex h-dvh overflow-hidden bg-white">
+      {/* 桌面端侧边栏 */}
+      <aside className="hidden w-80 flex-col border-r border-slate-200 md:flex">
+        <Sidebar {...sidebarProps} />
+      </aside>
 
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
-            <button
-              type="button"
-              onClick={clearConversation}
-              disabled={isStreaming}
-              className="flex h-11 w-full items-center justify-center gap-2 border border-slate-900 bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-200 disabled:text-slate-400"
-            >
-              <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
-              新会话
-            </button>
+      {/* 移动端侧边栏抽屉 */}
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/20 md:hidden"
+          onClick={() => setDrawerOpen(false)}
+          role="presentation"
+        />
+      )}
+      <div
+        className={cn(
+          "fixed left-0 top-0 z-50 h-dvh w-72 transform bg-white transition-transform duration-200 md:hidden",
+          drawerOpen ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <Sidebar {...sidebarProps} onClose={() => setDrawerOpen(false)} />
+      </div>
 
-            <section>
-              <div className="mb-2 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                <History className="h-3.5 w-3.5" aria-hidden="true" />
-                样例
-              </div>
-              <div className="space-y-2">
-                {examples.map((example) => (
-                  <button
-                    key={example}
-                    type="button"
-                    disabled={isStreaming}
-                    onClick={() => startQuery(example)}
-                    className="w-full border border-slate-200 bg-white px-3 py-3 text-left text-sm leading-5 text-slate-700 transition hover:-translate-y-0.5 hover:border-moss/30 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-55"
-                  >
-                    {example}
-                  </button>
+      {/* 主工作区 */}
+      <main className="flex min-w-0 flex-1 flex-col">
+        {/* 顶部操作栏 */}
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 md:hidden">
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            disabled={isStreaming}
+            className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="打开侧边栏"
+          >
+            <Menu className="h-5 w-5" aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            onClick={newChat}
+            disabled={isStreaming}
+            className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="新建对话"
+          >
+            <Eraser className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+
+        {/* 对话区域 */}
+        <div className="min-h-0 flex-1 overflow-y-auto" ref={scrollRef}>
+          {messages.length === 0 ? (
+            <EmptyState examples={examples} onUseExample={fillExample} />
+          ) : (
+            <div className="px-4 py-4 sm:px-6 sm:py-6">
+              <div className="mx-auto max-w-2xl space-y-4">
+                {messages.map((message) => (
+                  <MessageBubble key={message.id} message={message} />
                 ))}
               </div>
-            </section>
-          </div>
-
-          <div className="border-t border-slate-200 p-4">
-            <div className="grid gap-2 text-xs text-slate-500">
-              <div className="flex items-center justify-between gap-3">
-                <span className="inline-flex items-center gap-2">
-                  <Server className="h-3.5 w-3.5" aria-hidden="true" />
-                  API
-                </span>
-                <span className="truncate font-mono text-slate-700">{API_BASE_URL}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-2">
-                  <Activity className="h-3.5 w-3.5" aria-hidden="true" />
-                  完成
-                </span>
-                <span className="text-slate-700">{completedCount}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-2">
-                  <Eraser className="h-3.5 w-3.5" aria-hidden="true" />
-                  异常
-                </span>
-                <span className="text-slate-700">{errorCount}</span>
-              </div>
             </div>
+          )}
+        </div>
+
+        {/* 输入框 */}
+        <div className="border-t border-slate-200 px-4 py-4 sm:px-6 sm:py-6">
+          <div className="mx-auto max-w-2xl">
+            <Composer
+              value={draft}
+              onChange={setDraft}
+              onSubmit={startQuery}
+              disabled={!canSubmit}
+              isStreaming={isStreaming}
+              inputRef={inputRef}
+              onStop={stopQuery}
+            />
           </div>
-        </aside>
-
-        <main className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-          <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/85 px-4 backdrop-blur lg:px-6">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="grid h-9 w-9 shrink-0 place-items-center border border-slate-200 bg-slate-50 text-moss xl:hidden">
-                <BarChart3 className="h-4 w-4" aria-hidden="true" />
-              </div>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-slate-900">智能数据分析 Agent</div>
-                <div className="truncate text-xs text-slate-500">FastAPI SSE / LangGraph</div>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={clearConversation}
-              disabled={messages.length === 0 || isStreaming}
-              className={cn(
-                "grid h-9 w-9 place-items-center border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-35",
-              )}
-              title="清空"
-              aria-label="清空"
-            >
-              <Eraser className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </header>
-
-          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6 lg:px-8">
-              {messages.length === 0 ? (
-                <EmptyState examples={examples} onUseExample={(example) => setDraft(example)} />
-              ) : (
-                <>
-                  <section className="grid gap-3 md:grid-cols-3">
-                    <div className="border border-slate-200 bg-white/90 px-4 py-3">
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">当前问题</div>
-                      <div className="mt-2 max-h-12 overflow-hidden text-sm leading-6 text-slate-900">
-                        {activeRun?.query ?? "待开始"}
-                      </div>
-                    </div>
-                    <div className="border border-slate-200 bg-white/90 px-4 py-3">
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">状态</div>
-                      <div className="mt-2 text-sm font-semibold text-slate-900">
-                        {activeRun?.status === "running"
-                          ? "运行中"
-                          : activeRun?.status === "done"
-                            ? "已完成"
-                            : activeRun?.status === "error"
-                              ? "异常"
-                              : activeRun?.status === "stopped"
-                                ? "已停止"
-                                : "就绪"}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">{activeStep}</div>
-                    </div>
-                    <div className="border border-slate-200 bg-white/90 px-4 py-3">
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">结果</div>
-                      <div className="mt-2 text-sm font-semibold text-slate-900">
-                        {activeRun?.rows !== undefined ? `${activeRun.rows} 行` : "待返回"}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {activeRun?.summary ?? "暂无摘要"}
-                      </div>
-                    </div>
-                  </section>
-
-                  {messages.map((message) => (
-                    <MessageBubble key={message.id} message={message} />
-                  ))}
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="border-t border-slate-200 bg-slate-50/90 px-4 py-2 text-center text-xs text-slate-500">
-            <span className="inline-flex items-center gap-2">
-              <Leaf className="h-3.5 w-3.5 text-moss" aria-hidden="true" />
-              {isStreaming ? "运行中" : "就绪"}
-            </span>
-          </div>
-          <Composer
-            value={draft}
-            disabled={!canSubmit}
-            isStreaming={isStreaming}
-            onChange={setDraft}
-            onSubmit={() => startQuery()}
-            onStop={stopQuery}
-          />
-        </main>
-
-        <SessionRail
-          apiBaseUrl={API_BASE_URL}
-          isStreaming={isStreaming}
-          totalRuns={recentRuns.length}
-          successRuns={completedCount}
-          errorRuns={errorCount}
-          currentStep={activeStep}
-          latestRun={activeRun}
-          recentRuns={recentRuns}
-          onOpenRun={openHistory}
-          onDeleteRun={deleteRun}
-        />
-      </div>
+        </div>
+      </main>
     </div>
-  );
-}
-
-function StatusDot({ active }: { active: boolean }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex h-2.5 w-2.5 shrink-0 rounded-full",
-        active ? "bg-moss shadow-[0_0_0_4px_rgba(15,118,110,0.14)]" : "bg-slate-300",
-      )}
-      aria-hidden="true"
-    />
   );
 }

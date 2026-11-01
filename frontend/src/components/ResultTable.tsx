@@ -1,90 +1,58 @@
 /**
  * 查询结果表格组件
- * 将后端返回的结构化数据归一化为可滚动表格
+ * 按列类型渲染结果：数值列右对齐并格式化，表头吸顶，超出高度滚动
  */
-import { Database, FileJson, Info } from "lucide-react";
+import { cn } from "../lib/format";
+import { formatNumber, parseNumber, type ColumnInfo, type Row } from "../lib/resultData";
 
-function normalizeRows(data: unknown): Array<Record<string, unknown>> {
-  if (Array.isArray(data)) {
-    return data.map((item, index) =>
-      item && typeof item === "object" && !Array.isArray(item)
-        ? (item as Record<string, unknown>)
-        : { 序号: index + 1, 值: item },
-    );
+function formatCell(value: unknown, column: ColumnInfo) {
+  if (value === null || value === undefined || value === "") return "-";
+  if (column.kind === "number") {
+    const number = parseNumber(value);
+    if (number !== null) return formatNumber(number);
   }
-
-  if (data && typeof data === "object") {
-    return [data as Record<string, unknown>];
-  }
-
-  return [{ 值: data ?? "" }];
-}
-
-function formatCell(value: unknown) {
-  if (value === null || value === undefined) return "-";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
 
-export function ResultTable({ data, truncated = false }: { data: unknown; truncated?: boolean }) {
-  const rows = normalizeRows(data);
-  const columns = Array.from(
-    rows.reduce((keys, row) => {
-      Object.keys(row).forEach((key) => keys.add(key));
-      return keys;
-    }, new Set<string>()),
-  );
-
-  if (columns.length === 0) {
-    return null;
-  }
-
+export function ResultTable({ rows, columns }: { rows: Row[]; columns: ColumnInfo[] }) {
   return (
-    <section className="mt-4 overflow-hidden border border-slate-200 bg-white/88">
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-          <Database className="h-4 w-4 text-moss" aria-hidden="true" />
-          结果
-        </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <FileJson className="h-3.5 w-3.5" aria-hidden="true" />
-          {rows.length} 行
-        </div>
-      </div>
-      {truncated && (
-        <div className="flex items-center gap-2 border-b border-brass/20 bg-brass/10 px-4 py-2 text-xs text-brass">
-          <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          仅显示前 {rows.length} 行，可补充筛选条件或改为聚合查询。
-        </div>
-      )}
-      <div className="max-h-[360px] overflow-auto">
-        <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
-          <thead className="sticky top-0 z-10 bg-slate-50">
-            <tr>
+    <div className="max-h-[360px] overflow-auto">
+      <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
+        <thead className="sticky top-0 z-10 bg-slate-50">
+          <tr>
+            {columns.map((column) => (
+              <th
+                key={column.name}
+                scope="col"
+                className={cn(
+                  "whitespace-nowrap border-b border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-500",
+                  column.kind === "number" && "text-right",
+                )}
+              >
+                {column.name}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={rowIndex} className="transition hover:bg-slate-50">
               {columns.map((column) => (
-                <th
-                  key={column}
-                  scope="col"
-                  className="border-b border-slate-200 px-4 py-3 font-semibold text-slate-600"
+                <td
+                  key={column.name}
+                  className={cn(
+                    "whitespace-nowrap border-b border-slate-100 px-4 py-2.5 text-slate-700",
+                    column.kind === "number" && "text-right font-mono text-[13px] tabular-nums",
+                  )}
                 >
-                  {column}
-                </th>
+                  {formatCell(row[column.name], column)}
+                </td>
               ))}
             </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, rowIndex) => (
-              <tr key={rowIndex} className="odd:bg-white even:bg-slate-50/60">
-                {columns.map((column) => (
-                  <td key={column} className="border-b border-slate-100 px-4 py-3 text-slate-700">
-                    {formatCell(row[column])}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

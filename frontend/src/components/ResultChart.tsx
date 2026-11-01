@@ -1,83 +1,116 @@
 /**
  * 查询结果图表
- * 从表格结果中识别一列维度和一列数值，生成轻量柱状图。
+ * 根据列类型自动选择柱状图或折线图，支持切换图表类型和选择指标
  */
-import { BarChart3 } from "lucide-react";
+import { BarChart3, LineChart as LineChartIcon } from "lucide-react";
+import { useState } from "react";
+import { cn } from "../lib/format";
+import {
+  barPoints,
+  formatNumber,
+  lineSeries,
+  MAX_BARS,
+  type ChartPlan,
+  type ChartPoint,
+  type ChartType,
+  type Row,
+} from "../lib/resultData";
+import { LineChart } from "./LineChart";
 
-type ChartRow = {
-  label: string;
-  value: number;
-};
-
-function normalizeRows(data: unknown): Array<Record<string, unknown>> {
-  if (!Array.isArray(data)) return [];
-
-  return data.filter(
-    (item): item is Record<string, unknown> =>
-      Boolean(item) && typeof item === "object" && !Array.isArray(item),
-  );
-}
-
-function pickChartRows(data: unknown): ChartRow[] {
-  const rows = normalizeRows(data);
-  if (rows.length === 0) return [];
-
-  const columns = Array.from(
-    rows.reduce((keys, row) => {
-      Object.keys(row).forEach((key) => keys.add(key));
-      return keys;
-    }, new Set<string>()),
-  );
-  const numberColumn = columns.find((column) =>
-    rows.some((row) => typeof row[column] === "number"),
-  );
-  const labelColumn = columns.find((column) => column !== numberColumn);
-
-  if (!numberColumn || !labelColumn) return [];
-
-  return rows
-    .map((row) => ({
-      label: String(row[labelColumn] ?? "-"),
-      value: Number(row[numberColumn] ?? 0),
-    }))
-    .filter((row) => Number.isFinite(row.value))
-    .slice(0, 8);
-}
-
-export function ResultChart({ data }: { data: unknown }) {
-  const rows = pickChartRows(data);
-  if (rows.length === 0) return null;
-
-  const max = Math.max(...rows.map((row) => row.value), 1);
+function BarChart({ points }: { points: ChartPoint[] }) {
+  const max = Math.max(...points.map((point) => Math.abs(point.value)), 1);
 
   return (
-    <section className="mt-4 border border-slate-200 bg-white/88">
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-          <BarChart3 className="h-4 w-4 text-moss" aria-hidden="true" />
-          图表
+    <div className="space-y-2">
+      {points.map((point, index) => (
+        <div
+          key={`${point.label}-${index}`}
+          className="grid grid-cols-[minmax(64px,140px)_minmax(0,1fr)_minmax(64px,auto)] items-center gap-3 text-sm"
+          title={`${point.label}：${formatNumber(point.value)}`}
+        >
+          <div className="truncate text-slate-600">{point.label}</div>
+          <div className="h-6 rounded bg-slate-100">
+            <div
+              className={cn("h-full rounded", point.value < 0 ? "bg-tomato/60" : "bg-moss/75")}
+              style={{ width: `${Math.max((Math.abs(point.value) / max) * 100, 2)}%` }}
+            />
+          </div>
+          <div className="text-right font-mono text-xs tabular-nums text-slate-700">
+            {formatNumber(point.value)}
+          </div>
         </div>
-        <div className="text-xs text-slate-500">Top {rows.length}</div>
-      </div>
-      <div className="space-y-3 px-4 py-4">
-        {rows.map((row) => {
-          const width = `${Math.max((row.value / max) * 100, 4)}%`;
+      ))}
+    </div>
+  );
+}
 
-          return (
-            <div key={row.label} className="grid grid-cols-[80px_minmax(0,1fr)_72px] items-center gap-3 text-sm">
-              <div className="truncate text-slate-600" title={row.label}>
-                {row.label}
-              </div>
-              <div className="h-8 bg-slate-100">
-                <div className="h-full bg-moss/75" style={{ width }} />
-              </div>
-              <div className="truncate text-right font-mono text-xs text-slate-700">
-                {row.value.toLocaleString("zh-CN")}
-              </div>
-            </div>
-          );
-        })}
+function TypeToggle({ value, onChange }: { value: ChartType; onChange: (value: ChartType) => void }) {
+  const options = [
+    { type: "line" as const, label: "折线", Icon: LineChartIcon },
+    { type: "bar" as const, label: "柱状", Icon: BarChart3 },
+  ];
+  return (
+    <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+      {options.map(({ type, label, Icon }) => (
+        <button
+          key={type}
+          type="button"
+          onClick={() => onChange(type)}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition",
+            value === type ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+          )}
+          aria-pressed={value === type}
+        >
+          <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function ResultChart({ rows, plan }: { rows: Row[]; plan: ChartPlan }) {
+  const [type, setType] = useState<ChartType>(plan.defaultType);
+  const [metric, setMetric] = useState(plan.metrics[0]);
+  // 类别维度没有先后顺序，折线没有意义，只提供柱状图
+  const canSwitch = plan.defaultType === "line";
+  const bars = type === "bar" ? barPoints(rows, plan, metric) : null;
+
+  return (
+    <div className="px-4 py-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        {plan.metrics.length > 1 ? (
+          <select
+            value={metric}
+            onChange={(event) => setMetric(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-moss/25"
+            aria-label="选择指标"
+          >
+            {plan.metrics.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="text-xs font-medium text-slate-600">{metric}</span>
+        )}
+        {canSwitch && <TypeToggle value={type} onChange={setType} />}
       </div>
-    </section>
+
+      {bars ? (
+        <>
+          <BarChart points={bars.points} />
+          {bars.omitted > 0 && (
+            <div className="mt-3 text-xs text-slate-400">
+              仅显示前 {MAX_BARS} 项，其余 {bars.omitted} 项可在表格中查看。
+            </div>
+          )}
+        </>
+      ) : (
+        <LineChart series={lineSeries(rows, plan, metric)} />
+      )}
+    </div>
   );
 }

@@ -26,15 +26,13 @@ body,
 
 body {
     margin: 0;
-    background:
-        radial-gradient(circle at top left, rgba(15, 118, 110, 0.08), transparent 30%),
-        radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 24%),
-        #eef2f6;
+    background: #f4f6f9;
     overflow: hidden;
 }
 
 button,
-textarea {
+textarea,
+select {
     font: inherit;
 }
 

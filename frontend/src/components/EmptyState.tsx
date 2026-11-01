@@ -1,8 +1,8 @@
 /**
  * 首页空状态组件
- * 用更克制的工作台式布局展示品牌和示例问题
+ * 介绍能做什么并给出示例问题，点击示例会填入输入框，确认后再发送
  */
-import { BarChart3, Sparkles, Database, LineChart } from "lucide-react";
+import { ArrowUpRight, BarChart3 } from "lucide-react";
 
 type EmptyStateProps = {
   examples: string[];
@@ -11,39 +11,31 @@ type EmptyStateProps = {
 
 export function EmptyState({ examples, onUseExample }: EmptyStateProps) {
   return (
-    <div className="mx-auto flex min-h-full max-w-6xl flex-col justify-center px-4 py-10">
-      <div className="border border-slate-200 bg-white/90 p-6 shadow-[0_1px_0_rgba(15,23,42,0.04)] lg:p-8">
-        <div className="inline-flex items-center gap-2 border border-moss/20 bg-moss/10 px-3 py-1.5 text-sm font-semibold text-moss">
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
-          Smart Data Querying Agent
-        </div>
-        <div className="mt-5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <span className="inline-flex items-center gap-2 border border-slate-200 bg-slate-50 px-2.5 py-1.5">
-            <Database className="h-3.5 w-3.5" aria-hidden="true" />
-            MySQL
-          </span>
-          <span className="inline-flex items-center gap-2 border border-slate-200 bg-slate-50 px-2.5 py-1.5">
-            <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
-            LangGraph
-          </span>
-          <span className="inline-flex items-center gap-2 border border-slate-200 bg-slate-50 px-2.5 py-1.5">
-            <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
-            FastAPI
-          </span>
-        </div>
+    <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center py-10">
+      <div className="grid h-11 w-11 place-items-center rounded-xl bg-moss/10 text-moss">
+        <BarChart3 className="h-6 w-6" aria-hidden="true" />
+      </div>
+      <h1 className="mt-5 text-2xl font-semibold text-slate-900">想了解哪些经营数据？</h1>
+      <p className="mt-2 text-[15px] leading-7 text-slate-500">
+        用一句话描述问题，助手会查找相关的表和指标，生成并校验 SQL，再从数仓返回结果和图表。
+      </p>
 
-        <div className="mt-8 grid gap-3 md:grid-cols-2">
-          {examples.map((example) => (
-            <button
-              key={example}
-              type="button"
-              onClick={() => onUseExample(example)}
-              className="min-h-20 border border-slate-200 bg-slate-50/80 px-4 py-4 text-left text-[15px] leading-6 text-slate-800 transition hover:-translate-y-0.5 hover:border-moss/30 hover:bg-white focus:outline-none focus:ring-2 focus:ring-moss/25"
-            >
-              {example}
-            </button>
-          ))}
-        </div>
+      <div className="mt-8 text-xs font-medium text-slate-500">试试这些问题</div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {examples.map((example) => (
+          <button
+            key={example}
+            type="button"
+            onClick={() => onUseExample(example)}
+            className="group flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-left text-sm leading-6 text-slate-700 shadow-card transition hover:border-moss/40 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-moss/25"
+          >
+            {example}
+            <ArrowUpRight
+              className="mt-1 h-4 w-4 shrink-0 text-slate-300 transition group-hover:text-moss"
+              aria-hidden="true"
+            />
+          </button>
+        ))}
       </div>
     </div>
   );
