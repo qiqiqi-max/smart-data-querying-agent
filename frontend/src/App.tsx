@@ -346,36 +346,49 @@ export default function App() {
 
       {/* 主工作区 */}
       <main className="flex min-w-0 flex-1 flex-col">
-        {/* 顶部操作栏 */}
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 md:hidden">
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            disabled={isStreaming}
-            className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="打开侧边栏"
-          >
-            <Menu className="h-5 w-5" aria-hidden="true" />
-          </button>
+        {/* 顶部操作栏与状态条 */}
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/70 px-4 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              disabled={isStreaming}
+              className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 md:hidden disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="打开侧边栏"
+            >
+              <Menu className="h-5 w-5" aria-hidden="true" />
+            </button>
 
-          <button
-            type="button"
-            onClick={newChat}
-            disabled={isStreaming}
-            className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="新建对话"
-          >
-            <Eraser className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
+            <div className="flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-emerald-500 ring-4 ring-emerald-500/20" />
+              <span className="text-xs font-medium text-slate-700">
+                {isStreaming ? "Agent 思考与查询中..." : "系统就绪"}
+              </span>
+            </div>
+          </div>
 
-        {/* 对话区域 */}
+          <div className="flex items-center gap-2">
+            {messages.length > 0 && (
+              <button
+                type="button"
+                onClick={newChat}
+                disabled={isStreaming}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 shadow-subtle transition hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Eraser className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                <span>清空会话</span>
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* 对话与图表区域 */}
         <div className="min-h-0 flex-1 overflow-y-auto" ref={scrollRef}>
           {messages.length === 0 ? (
             <EmptyState examples={examples} onUseExample={fillExample} />
           ) : (
-            <div className="px-4 py-4 sm:px-6 sm:py-6">
-              <div className="mx-auto max-w-2xl space-y-4">
+            <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
+              <div className="space-y-6">
                 {messages.map((message) => (
                   <MessageBubble key={message.id} message={message} />
                 ))}
@@ -384,9 +397,9 @@ export default function App() {
           )}
         </div>
 
-        {/* 输入框 */}
-        <div className="border-t border-slate-200 px-4 py-4 sm:px-6 sm:py-6">
-          <div className="mx-auto max-w-2xl">
+        {/* 底部输入框 */}
+        <div className="relative shrink-0 border-t border-slate-200/60 bg-gradient-to-t from-white via-white/80 to-transparent p-4 sm:px-6">
+          <div className="mx-auto max-w-4xl">
             <Composer
               value={draft}
               onChange={setDraft}
