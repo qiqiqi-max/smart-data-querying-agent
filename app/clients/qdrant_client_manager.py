@@ -34,7 +34,9 @@ class QdrantClientManager:
         """
         try:
             if app_config.local_mode:
-                storage_path = resolve_project_path(app_config.local_data_dir) / "qdrant"
+                storage_path = (
+                    resolve_project_path(app_config.local_data_dir) / "qdrant"
+                )
                 storage_path.mkdir(parents=True, exist_ok=True)
                 self.client = AsyncQdrantClient(
                     path=str(storage_path), check_compatibility=False

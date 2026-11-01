@@ -47,7 +47,9 @@ def test_read_only_sql_rejects_writes_and_multiple_statements(sql):
         DWMySQLRepository._ensure_read_only(sql)
 
 
-@pytest.mark.parametrize("identifier", ["fact_order; DROP TABLE users", "fact-order", "1table"])
+@pytest.mark.parametrize(
+    "identifier", ["fact_order; DROP TABLE users", "fact-order", "1table"]
+)
 def test_identifier_validation_rejects_injection_shapes(identifier):
     with pytest.raises(ValueError):
         DWMySQLRepository._quote_identifier(identifier)
@@ -66,9 +68,17 @@ def test_limit_validation_rejects_out_of_range_values():
 
 def test_validation_route_has_a_bounded_correction_loop():
     assert route_after_validation({"error": None}) == "run_sql"
-    assert route_after_validation({"error": "bad sql", "sql_retry_count": 0}) == "correct_sql"
-    assert route_after_validation({"error": "bad sql", "sql_retry_count": 1}) == "correct_sql"
-    assert route_after_validation({"error": "bad sql", "sql_retry_count": 2}) == "fail_sql"
+    assert (
+        route_after_validation({"error": "bad sql", "sql_retry_count": 0})
+        == "correct_sql"
+    )
+    assert (
+        route_after_validation({"error": "bad sql", "sql_retry_count": 1})
+        == "correct_sql"
+    )
+    assert (
+        route_after_validation({"error": "bad sql", "sql_retry_count": 2}) == "fail_sql"
+    )
 
 
 def _limited_sql(sql: str, max_rows: int = 100) -> str:

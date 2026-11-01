@@ -73,7 +73,9 @@ class RequestsChatModel(BaseChatModel):
                 if token in content:
                     content = content.split(token, 1)[0]
                     break
-        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content))])
+        return ChatResult(
+            generations=[ChatGeneration(message=AIMessage(content=content))]
+        )
 
 
 # 统一从配置读取模型三件套，节点只复用 llm，不重复初始化模型连接

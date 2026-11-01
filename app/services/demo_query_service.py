@@ -52,7 +52,16 @@ DIMENSIONS: tuple[DimensionSpec, ...] = (
         table="dim_region",
         column="province",
         label="省份",
-        aliases=("省份", "省", "广东省", "浙江省", "四川省", "北京市", "上海市", "湖北省"),
+        aliases=(
+            "省份",
+            "省",
+            "广东省",
+            "浙江省",
+            "四川省",
+            "北京市",
+            "上海市",
+            "湖北省",
+        ),
     ),
     DimensionSpec(
         table="dim_customer",
@@ -70,13 +79,40 @@ DIMENSIONS: tuple[DimensionSpec, ...] = (
         table="dim_product",
         column="category",
         label="品类",
-        aliases=("品类", "类别", "分类", "手机数码", "家用电器", "鞋靴", "服饰", "食品饮料", "休闲零食"),
+        aliases=(
+            "品类",
+            "类别",
+            "分类",
+            "手机数码",
+            "家用电器",
+            "鞋靴",
+            "服饰",
+            "食品饮料",
+            "休闲零食",
+        ),
     ),
     DimensionSpec(
         table="dim_product",
         column="brand",
         label="品牌",
-        aliases=("品牌", "苹果", "三星", "华为", "戴森", "美的", "耐克", "阿迪达斯", "优衣库", "李维斯", "雀巢", "蒙牛", "乐事", "奥利奥", "亚马逊", "Instant Pot"),
+        aliases=(
+            "品牌",
+            "苹果",
+            "三星",
+            "华为",
+            "戴森",
+            "美的",
+            "耐克",
+            "阿迪达斯",
+            "优衣库",
+            "李维斯",
+            "雀巢",
+            "蒙牛",
+            "乐事",
+            "奥利奥",
+            "亚马逊",
+            "Instant Pot",
+        ),
     ),
     DimensionSpec(
         table="dim_product",
@@ -120,12 +156,48 @@ METRICS: tuple[MetricSpec, ...] = (
 )
 
 VALUE_FILTERS: dict[str, tuple[str, str, tuple[str, ...]]] = {
-    "dim_region.region_name": ("r", "region_name", ("华北", "华东", "华南", "华中", "西南")),
-    "dim_region.province": ("r", "province", ("广东省", "浙江省", "四川省", "北京市", "上海市", "湖北省")),
+    "dim_region.region_name": (
+        "r",
+        "region_name",
+        ("华北", "华东", "华南", "华中", "西南"),
+    ),
+    "dim_region.province": (
+        "r",
+        "province",
+        ("广东省", "浙江省", "四川省", "北京市", "上海市", "湖北省"),
+    ),
     "dim_customer.gender": ("c", "gender", ("男", "女")),
-    "dim_customer.member_level": ("c", "member_level", ("青铜", "白银", "黄金", "铂金")),
-    "dim_product.category": ("p", "category", ("手机数码", "家用电器", "鞋靴", "服饰", "食品饮料", "休闲零食")),
-    "dim_product.brand": ("p", "brand", ("苹果", "三星", "华为", "戴森", "美的", "耐克", "阿迪达斯", "优衣库", "李维斯", "雀巢", "蒙牛", "乐事", "奥利奥", "亚马逊", "Instant Pot")),
+    "dim_customer.member_level": (
+        "c",
+        "member_level",
+        ("青铜", "白银", "黄金", "铂金"),
+    ),
+    "dim_product.category": (
+        "p",
+        "category",
+        ("手机数码", "家用电器", "鞋靴", "服饰", "食品饮料", "休闲零食"),
+    ),
+    "dim_product.brand": (
+        "p",
+        "brand",
+        (
+            "苹果",
+            "三星",
+            "华为",
+            "戴森",
+            "美的",
+            "耐克",
+            "阿迪达斯",
+            "优衣库",
+            "李维斯",
+            "雀巢",
+            "蒙牛",
+            "乐事",
+            "奥利奥",
+            "亚马逊",
+            "Instant Pot",
+        ),
+    ),
 }
 
 JOIN_SQL = {
@@ -209,7 +281,18 @@ def _pick_metric(query: str) -> MetricSpec:
 
 
 def _pick_group_dimension(query: str) -> DimensionSpec | None:
-    group_markers = ("各", "每个", "按", "排行", "top", "TOP", "最多", "前10", "前 10", "分布")
+    group_markers = (
+        "各",
+        "每个",
+        "按",
+        "排行",
+        "top",
+        "TOP",
+        "最多",
+        "前10",
+        "前 10",
+        "分布",
+    )
     if not any(marker in query for marker in group_markers):
         return None
 
@@ -304,16 +387,16 @@ def _build_sql(query: str) -> tuple[str, str, list[str]]:
     date_clause = _extract_date_clause(query)
     if date_clause:
         filter_clauses.append(date_clause)
-        if "dim_date" not in join_names and ("季度" in query or "月" in query or "年" in query or "最近" in query):
+        if "dim_date" not in join_names and (
+            "季度" in query or "月" in query or "年" in query or "最近" in query
+        ):
             join_names.append("dim_date")
 
     joins = [JOIN_SQL[name] for name in join_names if name in JOIN_SQL]
 
     if group_dim:
         group_expr, group_label = GROUP_SQL[f"{group_dim.table}.{group_dim.column}"]
-        select_clause = (
-            f"SELECT {group_expr} AS `{group_label}`, {metric.expression} AS `{metric.label}`"
-        )
+        select_clause = f"SELECT {group_expr} AS `{group_label}`, {metric.expression} AS `{metric.label}`"
         group_clause = f"GROUP BY {group_expr}"
         order_clause = f"ORDER BY `{metric.label}` DESC"
         limit_clause = "LIMIT 10"
@@ -347,42 +430,210 @@ def _build_context_snapshot(query: str) -> dict:
         columns = []
         if table_name == "fact_order":
             columns = [
-                {"name": "order_id", "type": "varchar", "role": "primary_key", "examples": [], "description": "订单唯一标识", "alias": ["订单ID"]},
-                {"name": "customer_id", "type": "varchar", "role": "foreign_key", "examples": [], "description": "客户外键", "alias": ["客户ID"]},
-                {"name": "product_id", "type": "varchar", "role": "foreign_key", "examples": [], "description": "商品外键", "alias": ["商品ID"]},
-                {"name": "date_id", "type": "int", "role": "foreign_key", "examples": [], "description": "日期外键", "alias": ["日期"]},
-                {"name": "region_id", "type": "varchar", "role": "foreign_key", "examples": [], "description": "地区外键", "alias": ["地区ID"]},
-                {"name": "order_quantity", "type": "int", "role": "measure", "examples": [], "description": "订单数量", "alias": ["销量"]},
-                {"name": "order_amount", "type": "float", "role": "measure", "examples": [], "description": "订单金额", "alias": ["销售额"]},
+                {
+                    "name": "order_id",
+                    "type": "varchar",
+                    "role": "primary_key",
+                    "examples": [],
+                    "description": "订单唯一标识",
+                    "alias": ["订单ID"],
+                },
+                {
+                    "name": "customer_id",
+                    "type": "varchar",
+                    "role": "foreign_key",
+                    "examples": [],
+                    "description": "客户外键",
+                    "alias": ["客户ID"],
+                },
+                {
+                    "name": "product_id",
+                    "type": "varchar",
+                    "role": "foreign_key",
+                    "examples": [],
+                    "description": "商品外键",
+                    "alias": ["商品ID"],
+                },
+                {
+                    "name": "date_id",
+                    "type": "int",
+                    "role": "foreign_key",
+                    "examples": [],
+                    "description": "日期外键",
+                    "alias": ["日期"],
+                },
+                {
+                    "name": "region_id",
+                    "type": "varchar",
+                    "role": "foreign_key",
+                    "examples": [],
+                    "description": "地区外键",
+                    "alias": ["地区ID"],
+                },
+                {
+                    "name": "order_quantity",
+                    "type": "int",
+                    "role": "measure",
+                    "examples": [],
+                    "description": "订单数量",
+                    "alias": ["销量"],
+                },
+                {
+                    "name": "order_amount",
+                    "type": "float",
+                    "role": "measure",
+                    "examples": [],
+                    "description": "订单金额",
+                    "alias": ["销售额"],
+                },
             ]
         elif table_name == "dim_region":
             columns = [
-                {"name": "region_id", "type": "varchar", "role": "primary_key", "examples": [], "description": "地区唯一标识", "alias": ["地区ID"]},
-                {"name": "province", "type": "varchar", "role": "dimension", "examples": [], "description": "省份", "alias": ["省份"]},
-                {"name": "region_name", "type": "varchar", "role": "dimension", "examples": [], "description": "大区", "alias": ["地区"]},
-                {"name": "country", "type": "varchar", "role": "dimension", "examples": [], "description": "国家", "alias": ["国家"]},
+                {
+                    "name": "region_id",
+                    "type": "varchar",
+                    "role": "primary_key",
+                    "examples": [],
+                    "description": "地区唯一标识",
+                    "alias": ["地区ID"],
+                },
+                {
+                    "name": "province",
+                    "type": "varchar",
+                    "role": "dimension",
+                    "examples": [],
+                    "description": "省份",
+                    "alias": ["省份"],
+                },
+                {
+                    "name": "region_name",
+                    "type": "varchar",
+                    "role": "dimension",
+                    "examples": [],
+                    "description": "大区",
+                    "alias": ["地区"],
+                },
+                {
+                    "name": "country",
+                    "type": "varchar",
+                    "role": "dimension",
+                    "examples": [],
+                    "description": "国家",
+                    "alias": ["国家"],
+                },
             ]
         elif table_name == "dim_customer":
             columns = [
-                {"name": "customer_id", "type": "varchar", "role": "primary_key", "examples": [], "description": "客户唯一标识", "alias": ["客户ID"]},
-                {"name": "customer_name", "type": "varchar", "role": "dimension", "examples": [], "description": "客户名称", "alias": ["客户名称"]},
-                {"name": "gender", "type": "varchar", "role": "dimension", "examples": [], "description": "客户性别", "alias": ["性别"]},
-                {"name": "member_level", "type": "varchar", "role": "dimension", "examples": [], "description": "会员等级", "alias": ["会员等级"]},
+                {
+                    "name": "customer_id",
+                    "type": "varchar",
+                    "role": "primary_key",
+                    "examples": [],
+                    "description": "客户唯一标识",
+                    "alias": ["客户ID"],
+                },
+                {
+                    "name": "customer_name",
+                    "type": "varchar",
+                    "role": "dimension",
+                    "examples": [],
+                    "description": "客户名称",
+                    "alias": ["客户名称"],
+                },
+                {
+                    "name": "gender",
+                    "type": "varchar",
+                    "role": "dimension",
+                    "examples": [],
+                    "description": "客户性别",
+                    "alias": ["性别"],
+                },
+                {
+                    "name": "member_level",
+                    "type": "varchar",
+                    "role": "dimension",
+                    "examples": [],
+                    "description": "会员等级",
+                    "alias": ["会员等级"],
+                },
             ]
         elif table_name == "dim_product":
             columns = [
-                {"name": "product_id", "type": "varchar", "role": "primary_key", "examples": [], "description": "商品唯一标识", "alias": ["商品ID"]},
-                {"name": "product_name", "type": "varchar", "role": "dimension", "examples": [], "description": "商品名称", "alias": ["商品名称"]},
-                {"name": "category", "type": "varchar", "role": "dimension", "examples": [], "description": "商品品类", "alias": ["品类"]},
-                {"name": "brand", "type": "varchar", "role": "dimension", "examples": [], "description": "商品品牌", "alias": ["品牌"]},
+                {
+                    "name": "product_id",
+                    "type": "varchar",
+                    "role": "primary_key",
+                    "examples": [],
+                    "description": "商品唯一标识",
+                    "alias": ["商品ID"],
+                },
+                {
+                    "name": "product_name",
+                    "type": "varchar",
+                    "role": "dimension",
+                    "examples": [],
+                    "description": "商品名称",
+                    "alias": ["商品名称"],
+                },
+                {
+                    "name": "category",
+                    "type": "varchar",
+                    "role": "dimension",
+                    "examples": [],
+                    "description": "商品品类",
+                    "alias": ["品类"],
+                },
+                {
+                    "name": "brand",
+                    "type": "varchar",
+                    "role": "dimension",
+                    "examples": [],
+                    "description": "商品品牌",
+                    "alias": ["品牌"],
+                },
             ]
         elif table_name == "dim_date":
             columns = [
-                {"name": "date_id", "type": "int", "role": "primary_key", "examples": [], "description": "日期唯一标识", "alias": ["日期"]},
-                {"name": "year", "type": "int", "role": "dimension", "examples": [], "description": "年份", "alias": ["年"]},
-                {"name": "quarter", "type": "varchar", "role": "dimension", "examples": [], "description": "季度", "alias": ["季度"]},
-                {"name": "month", "type": "int", "role": "dimension", "examples": [], "description": "月份", "alias": ["月"]},
-                {"name": "day", "type": "int", "role": "dimension", "examples": [], "description": "日", "alias": ["日"]},
+                {
+                    "name": "date_id",
+                    "type": "int",
+                    "role": "primary_key",
+                    "examples": [],
+                    "description": "日期唯一标识",
+                    "alias": ["日期"],
+                },
+                {
+                    "name": "year",
+                    "type": "int",
+                    "role": "dimension",
+                    "examples": [],
+                    "description": "年份",
+                    "alias": ["年"],
+                },
+                {
+                    "name": "quarter",
+                    "type": "varchar",
+                    "role": "dimension",
+                    "examples": [],
+                    "description": "季度",
+                    "alias": ["季度"],
+                },
+                {
+                    "name": "month",
+                    "type": "int",
+                    "role": "dimension",
+                    "examples": [],
+                    "description": "月份",
+                    "alias": ["月"],
+                },
+                {
+                    "name": "day",
+                    "type": "int",
+                    "role": "dimension",
+                    "examples": [],
+                    "description": "日",
+                    "alias": ["日"],
+                },
             ]
         table_infos.append(
             {
@@ -419,8 +670,10 @@ async def run_demo_query(
     """执行一条本地演示问数流程，并返回 SSE 文本片段。"""
 
     step = "演示模式"
+
     def writer(payload: dict) -> str:
         return f"data: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
+
     yield writer({"type": "progress", "step": step, "status": "running"})
 
     try:
@@ -428,7 +681,17 @@ async def run_demo_query(
         keywords = snapshot["keywords"]
         sql = snapshot["sql"]
 
-        for name in ("抽取关键词", "召回字段信息", "召回指标信息", "召回字段取值", "合并召回信息", "过滤表信息", "过滤指标信息", "添加额外上下文", "生成SQL"):
+        for name in (
+            "抽取关键词",
+            "召回字段信息",
+            "召回指标信息",
+            "召回字段取值",
+            "合并召回信息",
+            "过滤表信息",
+            "过滤指标信息",
+            "添加额外上下文",
+            "生成SQL",
+        ):
             yield writer({"type": "progress", "step": name, "status": "running"})
             yield writer({"type": "progress", "step": name, "status": "success"})
 

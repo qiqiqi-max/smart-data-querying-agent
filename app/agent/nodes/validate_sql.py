@@ -34,7 +34,11 @@ async def validate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
             logger.info("SQL语法正确")
             attempts = [
                 *state.get("sql_attempts", []),
-                {"attempt": len(state.get("sql_attempts", [])) + 1, "sql": sql, "error": None},
+                {
+                    "attempt": len(state.get("sql_attempts", [])) + 1,
+                    "sql": sql,
+                    "error": None,
+                },
             ]
             return {"error": None, "sql_attempts": attempts}
         except Exception as e:

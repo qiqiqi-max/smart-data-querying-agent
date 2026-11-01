@@ -115,6 +115,7 @@ def resolve_project_path(value: str) -> Path:
     path = Path(value)
     return path if path.is_absolute() else project_root / path
 
+
 # 先读取本地 .env，让 YAML 中的 ${oc.env:...} 可以解析到敏感配置
 load_dotenv(project_root / ".env")
 

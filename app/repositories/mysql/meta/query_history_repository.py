@@ -119,9 +119,14 @@ class QueryHistoryRepository:
             update(QueryHistoryMySQL)
             .where(
                 QueryHistoryMySQL.status == "running",
-                QueryHistoryMySQL.updated_at < datetime.now() - timedelta(minutes=max_age_minutes),
+                QueryHistoryMySQL.updated_at
+                < datetime.now() - timedelta(minutes=max_age_minutes),
             )
-            .values(status="error", summary="查询已中断，请重新发起。", error="服务重启或连接中断")
+            .values(
+                status="error",
+                summary="查询已中断，请重新发起。",
+                error="服务重启或连接中断",
+            )
         )
         await self.session.commit()
         return result.rowcount or 0

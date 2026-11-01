@@ -38,7 +38,9 @@ class ValueESRepository:
         },
     }
 
-    def __init__(self, client: AsyncElasticsearch | None, local_path: Path | None = None):
+    def __init__(
+        self, client: AsyncElasticsearch | None, local_path: Path | None = None
+    ):
         self.client = client
         self.local_mode = app_config.local_mode
         self.local_path = local_path or (
@@ -150,7 +152,10 @@ class ValueESRepository:
             return 0.0
         if normalized_keyword == normalized_value:
             return 1.0
-        if normalized_keyword in normalized_value or normalized_value in normalized_keyword:
+        if (
+            normalized_keyword in normalized_value
+            or normalized_value in normalized_keyword
+        ):
             return 0.95
 
         keyword_tokens = {

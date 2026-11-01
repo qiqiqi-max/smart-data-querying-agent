@@ -96,9 +96,7 @@ async def get_query_service(
     meta_mysql_repository: Annotated[
         MetaMySQLRepository, Depends(get_meta_mysql_repository)
     ],
-    embedding_client: Annotated[
-        EmbeddingClient, Depends(get_embedding_client)
-    ],
+    embedding_client: Annotated[EmbeddingClient, Depends(get_embedding_client)],
     dw_mysql_repository: Annotated[DWMySQLRepository, Depends(get_dw_mysql_repository)],
     column_qdrant_repository: Annotated[
         ColumnQdrantRepository, Depends(get_column_qdrant_repository)
