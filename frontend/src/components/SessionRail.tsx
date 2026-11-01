@@ -136,9 +136,16 @@ export function SessionRail({
                         run.status === "done" && "bg-moss/10 text-moss",
                         run.status === "running" && "bg-brass/10 text-brass",
                         run.status === "error" && "bg-tomato/10 text-tomato",
+                        run.status === "stopped" && "bg-slate-100 text-slate-500",
                       )}
                     >
-                      {run.status === "done" ? "完成" : run.status === "running" ? "运行" : "异常"}
+                      {run.status === "done"
+                        ? "完成"
+                        : run.status === "running"
+                          ? "运行"
+                          : run.status === "stopped"
+                            ? "已停止"
+                            : "异常"}
                     </span>
                     <button type="button" disabled={run.status === "running"} onClick={() => onDeleteRun(run)} className="grid h-6 w-6 place-items-center text-slate-400 transition hover:text-tomato disabled:cursor-not-allowed disabled:opacity-20" title="删除记录" aria-label={`删除 ${run.query}`}>
                       <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />

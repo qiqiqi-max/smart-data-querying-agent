@@ -15,10 +15,12 @@ def count_result_rows(data: object) -> int:
     return 1
 
 
-def summarize_result(data: object) -> str:
-    """生成查询结果摘要"""
+def summarize_result(data: object, truncated: bool = False) -> str:
+    """生成查询结果摘要，结果被行数上限截断时提示只返回了前 N 行"""
 
     if isinstance(data, list):
+        if data and truncated:
+            return f"查询完成，仅返回前 {len(data)} 行结果。"
         if data:
             return f"查询完成，共 {len(data)} 行结果。"
         return "查询完成，结果为空。"

@@ -25,10 +25,11 @@ async def run_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]):
         dw_mysql_repository = runtime.context["dw_mysql_repository"]
 
         # 真实数据库访问统一封装在仓储层，节点只负责从状态取 SQL 并触发执行
-        result = await dw_mysql_repository.run(sql)
-        logger.info(f"SQL执行结果：{result}")
+        result, truncated = await dw_mysql_repository.run(sql)
+        logger.info(f"SQL执行结果：{result}，是否截断：{truncated}")
         writer({"type": "progress", "step": step, "status": "success"})
-        writer({"type": "result", "data": result})
+        # truncated 是附加字段，data 仍是结果行列表，兼容前端表格和历史记录
+        writer({"type": "result", "data": result, "truncated": truncated})
 
     except Exception as e:
         logger.error(f"{step} failed: {e}")

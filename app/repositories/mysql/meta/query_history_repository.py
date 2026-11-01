@@ -140,9 +140,10 @@ class QueryHistoryRepository:
                 QueryHistoryMySQL.status == "running",
             )
             .values(
-                status="error",
+                # 停止与执行失败区分开，不属于错误，error 字段保持为空
+                status="stopped",
                 summary="已停止本次查询。",
-                error="客户端中止或连接中断",
+                error=None,
                 updated_at=datetime.now(),
             )
         )

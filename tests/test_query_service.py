@@ -11,12 +11,13 @@ from app.services.query_service import QueryService
 class _FakeHistoryRepository:
     def __init__(self):
         self.errors = []
+        self.summaries = []
 
     async def create(self, history_id, query):
         self.history_id = history_id
 
     async def mark_done(self, history_id, result, summary):
-        pass
+        self.summaries.append(summary)
 
     async def mark_error(self, history_id, message):
         self.errors.append(message)
@@ -59,6 +60,11 @@ class _SlowGraph:
         yield {"type": "progress", "step": "抽取关键词", "status": "running"}
         await anyio.sleep(10)
         yield {"type": "result", "data": []}
+
+
+class _TruncatedGraph:
+    async def astream(self, **kwargs):
+        yield {"type": "result", "data": [{"n": 1}, {"n": 2}], "truncated": True}
 
 
 def _build_service(history_repository, session_factory):
@@ -149,3 +155,21 @@ def test_query_timeout_reports_readable_message(monkeypatch):
     assert "查询超时" in error["message"]
     assert history_repository.errors == [error["message"]]
     assert session_factory.calls == []
+
+
+def test_truncated_result_is_forwarded_and_summarized(monkeypatch):
+    monkeypatch.setattr(query_service_module, "graph", _TruncatedGraph())
+    history_repository = _FakeHistoryRepository()
+    service = _build_service(history_repository, _FakeSessionFactory())
+
+    async def exercise():
+        return [chunk async for chunk in service.query("q")]
+
+    chunks = asyncio.run(exercise())
+    result = json.loads(chunks[0].removeprefix("data: "))
+
+    # data 仍是结果行列表，截断标记作为附加字段透传给前端
+    assert result["data"] == [{"n": 1}, {"n": 2}]
+    assert result["truncated"] is True
+    assert history_repository.summaries == ["查询完成，仅返回前 2 行结果。"]
+    assert history_repository.errors == []

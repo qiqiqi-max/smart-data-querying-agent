@@ -21,7 +21,7 @@ class QueryHistoryMySQL(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, comment="记录编号")
     query: Mapped[str] = mapped_column(Text, nullable=False, comment="用户问题")
     status: Mapped[str] = mapped_column(
-        String(16), nullable=False, comment="运行状态(running/done/error)"
+        String(16), nullable=False, comment="运行状态(running/done/error/stopped)"
     )
     summary: Mapped[str | None] = mapped_column(Text, comment="结果摘要")
     result: Mapped[dict | list | None] = mapped_column(JSON, comment="结构化查询结果")

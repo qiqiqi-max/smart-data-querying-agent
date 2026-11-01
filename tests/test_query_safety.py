@@ -100,6 +100,58 @@ def test_row_limit_caps_outer_limit(sql, expected):
     assert _limited_sql(sql) == expected
 
 
+class _FakeDWSession:
+    """记录执行的 SQL，并按 SQL 中的 LIMIT 返回不超过 available 行的数据。"""
+
+    def __init__(self, available: int):
+        self.available = available
+        self.sqls = []
+
+    async def execute(self, clause):
+        sql = str(clause)
+        self.sqls.append(sql)
+        limit = DWMySQLRepository._parse_read_only(sql).args["limit"].expression
+        rows = [{"n": i} for i in range(min(self.available, int(limit.this)))]
+
+        class _Result:
+            def mappings(self):
+                return self
+
+            def fetchall(self):
+                return rows
+
+        return _Result()
+
+
+@pytest.mark.parametrize(
+    ("sql", "available", "expected_rows", "expected_truncated", "expected_limit"),
+    [
+        # 无 LIMIT 时多取一行，结果恰好等于上限不算截断
+        ("SELECT n FROM t", 3, 3, False, "LIMIT 4"),
+        ("SELECT n FROM t", 4, 3, True, "LIMIT 4"),
+        # 用户 LIMIT 不超过上限时保持原样，即使数据更多也不算截断
+        ("SELECT n FROM t LIMIT 3", 10, 3, False, "LIMIT 3"),
+        ("SELECT n FROM t LIMIT 2", 10, 2, False, "LIMIT 2"),
+        # 用户 LIMIT 恰好是上限加一时同样只返回上限行数，并标记截断
+        ("SELECT n FROM t LIMIT 4", 10, 3, True, "LIMIT 4"),
+        # 用户 LIMIT 超过上限时收紧，并保留原 OFFSET
+        ("SELECT n FROM t LIMIT 5, 100", 10, 3, True, "LIMIT 4 OFFSET 5"),
+        ("SELECT n FROM t LIMIT 100", 3, 3, False, "LIMIT 4"),
+    ],
+)
+def test_run_reports_truncation_only_when_extra_row_exists(
+    monkeypatch, sql, available, expected_rows, expected_truncated, expected_limit
+):
+    monkeypatch.setattr(DWMySQLRepository, "MAX_RESULT_ROWS", 3)
+    session = _FakeDWSession(available)
+
+    rows, truncated = asyncio.run(DWMySQLRepository(session).run(sql))
+
+    assert len(rows) == expected_rows
+    assert truncated is expected_truncated
+    assert session.sqls[0].endswith(expected_limit)
+
+
 @pytest.mark.parametrize(
     "sql",
     [
@@ -170,7 +222,12 @@ def test_delete_rejects_active_running_history():
 
 @pytest.mark.parametrize(
     ("status", "minutes_ago"),
-    [("done", 1), ("error", 1), ("running", RUNNING_STALE_MINUTES + 1)],
+    [
+        ("done", 1),
+        ("error", 1),
+        ("stopped", 1),
+        ("running", RUNNING_STALE_MINUTES + 1),
+    ],
 )
 def test_delete_allows_finished_or_stale_history(status, minutes_ago):
     model = _history(status, minutes_ago)
@@ -181,6 +238,46 @@ def test_delete_allows_finished_or_stale_history(status, minutes_ago):
 
 def test_delete_returns_false_for_missing_history():
     assert asyncio.run(QueryHistoryRepository(_FakeSession(None)).delete("h1")) is False
+
+
+class _RecordingSession:
+    def __init__(self):
+        self.statements = []
+
+    async def execute(self, statement):
+        self.statements.append(statement)
+
+        class _Result:
+            rowcount = 1
+
+        return _Result()
+
+    async def commit(self):
+        pass
+
+
+def test_mark_interrupted_sets_stopped_without_error():
+    session = _RecordingSession()
+
+    assert asyncio.run(QueryHistoryRepository(session).mark_interrupted("h1")) is True
+
+    params = session.statements[0].compile().params
+    assert params["status"] == "stopped"
+    assert params["summary"] == "已停止本次查询。"
+    assert params["error"] is None
+    # 只更新仍在运行的目标记录，已结束的记录不会被覆盖
+    assert params["id_1"] == "h1"
+    assert params["status_1"] == "running"
+
+
+def test_mark_stale_running_keeps_error_status():
+    session = _RecordingSession()
+
+    asyncio.run(QueryHistoryRepository(session).mark_stale_running())
+
+    params = session.statements[0].compile().params
+    assert params["status"] == "error"
+    assert params["status_1"] == "running"
 
 
 def test_keyword_dedupe_preserves_first_seen_order():

@@ -135,10 +135,14 @@ class DWMySQLRepository:
         sql = f"explain {self._ensure_read_only(sql)}"
         await self.session.execute(text(sql))
 
-    async def run(self, sql: str) -> list[dict]:
-        """执行最终 SQL，并把 SQLAlchemy 行对象转换成前端更易消费的字典列表"""
+    async def run(self, sql: str) -> tuple[list[dict], bool]:
+        """执行最终 SQL，返回字典列表形式的结果行，以及结果是否被行数上限截断"""
+        max_rows = self.MAX_RESULT_ROWS
         statement = self._parse_read_only(sql)
-        statement = self._apply_row_limit(statement, self.MAX_RESULT_ROWS)
+        # 上限多放一行用于判断截断：只有确实取到第 max_rows + 1 行才算被截断，
+        # 用户自己的 LIMIT 不超过 max_rows 时保持原样，结果本身不会超过上限
+        statement = self._apply_row_limit(statement, max_rows + 1)
         statement = self._apply_execution_timeout(statement, self.MAX_EXECUTION_TIME_MS)
         result = await self.session.execute(text(statement.sql(dialect="mysql")))
-        return [dict(row) for row in result.mappings().fetchall()]
+        rows = [dict(row) for row in result.mappings().fetchall()]
+        return rows[:max_rows], len(rows) > max_rows

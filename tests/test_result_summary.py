@@ -12,6 +12,14 @@ def test_summarize_list_result():
     assert summarize_result(data) == "查询完成，共 2 行结果。"
 
 
+def test_summarize_truncated_result():
+    data = [{"n": i} for i in range(1000)]
+
+    assert count_result_rows(data) == 1000
+    assert summarize_result(data, truncated=True) == "查询完成，仅返回前 1000 行结果。"
+    assert summarize_result(data, truncated=False) == "查询完成，共 1000 行结果。"
+
+
 def test_summarize_empty_result():
     assert count_result_rows([]) == 0
     assert summarize_result([]) == "查询完成，结果为空。"

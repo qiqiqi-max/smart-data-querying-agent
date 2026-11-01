@@ -13,6 +13,8 @@ export type ProgressEvent = {
 export type ResultEvent = {
   type: "result";
   data: unknown;
+  // 结果超过后端行数上限被截断时为 true，旧版后端不返回该字段
+  truncated?: boolean;
 };
 
 export type ErrorEvent = {
@@ -33,13 +35,14 @@ export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   createdAt: number;
-  status?: "streaming" | "done" | "error";
+  status?: "streaming" | "done" | "error" | "stopped";
   steps?: StepState[];
   result?: unknown;
+  truncated?: boolean;
   error?: string;
 };
 
-export type RunStatus = "running" | "done" | "error";
+export type RunStatus = "running" | "done" | "error" | "stopped";
 
 export type RunSummary = {
   id: string;

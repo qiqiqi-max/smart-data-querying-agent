@@ -2,7 +2,7 @@
  * 查询结果表格组件
  * 将后端返回的结构化数据归一化为可滚动表格
  */
-import { Database, FileJson } from "lucide-react";
+import { Database, FileJson, Info } from "lucide-react";
 
 function normalizeRows(data: unknown): Array<Record<string, unknown>> {
   if (Array.isArray(data)) {
@@ -26,7 +26,7 @@ function formatCell(value: unknown) {
   return String(value);
 }
 
-export function ResultTable({ data }: { data: unknown }) {
+export function ResultTable({ data, truncated = false }: { data: unknown; truncated?: boolean }) {
   const rows = normalizeRows(data);
   const columns = Array.from(
     rows.reduce((keys, row) => {
@@ -51,6 +51,12 @@ export function ResultTable({ data }: { data: unknown }) {
           {rows.length} 行
         </div>
       </div>
+      {truncated && (
+        <div className="flex items-center gap-2 border-b border-brass/20 bg-brass/10 px-4 py-2 text-xs text-brass">
+          <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          仅显示前 {rows.length} 行，可补充筛选条件或改为聚合查询。
+        </div>
+      )}
       <div className="max-h-[360px] overflow-auto">
         <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50">

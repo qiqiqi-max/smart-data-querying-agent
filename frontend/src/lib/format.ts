@@ -13,9 +13,13 @@ export function formatTime(timestamp: number) {
   }).format(timestamp);
 }
 
-export function summarizeResult(data: unknown) {
+// 与后端 app/services/result_summary.py 的摘要文案保持一致
+export function summarizeResult(data: unknown, truncated = false) {
   if (Array.isArray(data)) {
-    return data.length > 0 ? `查询完成，共 ${data.length} 行结果。` : "查询完成，结果为空。";
+    if (data.length === 0) return "查询完成，结果为空。";
+    return truncated
+      ? `查询完成，仅返回前 ${data.length} 行结果。`
+      : `查询完成，共 ${data.length} 行结果。`;
   }
 
   if (data && typeof data === "object") {
@@ -27,6 +31,11 @@ export function summarizeResult(data: unknown) {
   }
 
   return `查询完成：${String(data)}`;
+}
+
+// 历史记录不单独保存截断标记，通过摘要文案还原
+export function isTruncatedSummary(summary: string | null | undefined) {
+  return Boolean(summary?.startsWith("查询完成，仅返回前 "));
 }
 
 export function countResultRows(data: unknown) {

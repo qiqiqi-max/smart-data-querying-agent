@@ -17,7 +17,7 @@ import { EmptyState } from "./components/EmptyState";
 import { MessageBubble } from "./components/MessageBubble";
 import { SessionRail } from "./components/SessionRail";
 import { deleteQueryHistory, fetchQueryHistory, streamQuery } from "./lib/agentApi";
-import { cn, countResultRows, summarizeResult } from "./lib/format";
+import { cn, countResultRows, isTruncatedSummary, summarizeResult } from "./lib/format";
 import type {
   AgentEvent,
   ChatMessage,
@@ -69,7 +69,13 @@ function historyToRun(history: QueryHistoryItem): RunSummary {
     error: history.error ?? undefined,
     result: history.result,
     activeStep:
-      history.status === "done" ? "执行完成" : history.status === "error" ? "异常" : "运行中",
+      history.status === "done"
+        ? "执行完成"
+        : history.status === "error"
+          ? "异常"
+          : history.status === "stopped"
+            ? "已停止"
+            : "运行中",
   };
 }
 
@@ -220,8 +226,9 @@ export default function App() {
             return {
               ...message,
               status: "done",
-              content: summarizeResult(event.data),
+              content: summarizeResult(event.data, event.truncated),
               result: event.data,
+              truncated: event.truncated,
             };
           }
 
@@ -245,7 +252,7 @@ export default function App() {
       if (event.type === "result") {
         patchRun({
           status: "done",
-          summary: summarizeResult(event.data),
+          summary: summarizeResult(event.data, event.truncated),
           rows: countResultRows(event.data),
           activeStep: "执行完成",
           result: event.data,
@@ -280,7 +287,7 @@ export default function App() {
           message.id === assistantId
             ? {
                 ...message,
-                status: isAbort ? "done" : "error",
+                status: isAbort ? "stopped" : "error",
                 content: isAbort ? "已停止本次查询。" : "无法连接问数接口。",
                 error: isAbort ? undefined : error instanceof Error ? error.message : String(error),
               }
@@ -289,8 +296,9 @@ export default function App() {
       );
 
       if (isAbort) {
+        // 与后端 mark_interrupted 写入的 stopped 状态保持一致，刷新历史后不会跳变
         patchRun({
-          status: "done",
+          status: "stopped",
           summary: "已停止本次查询。",
           activeStep: "已停止",
         });
@@ -334,8 +342,9 @@ export default function App() {
         role: "assistant",
         content: run.summary || (run.status === "error" ? "这次查询没有成功。" : "历史记录已打开。"),
         createdAt: run.updatedAt,
-        status: run.status === "error" ? "error" : "done",
+        status: run.status === "error" || run.status === "stopped" ? run.status : "done",
         result: run.result,
+        truncated: isTruncatedSummary(run.summary),
         error: run.error,
       },
     ]);
@@ -478,7 +487,9 @@ export default function App() {
                             ? "已完成"
                             : activeRun?.status === "error"
                               ? "异常"
-                              : "就绪"}
+                              : activeRun?.status === "stopped"
+                                ? "已停止"
+                                : "就绪"}
                       </div>
                       <div className="mt-1 text-xs text-slate-500">{activeStep}</div>
                     </div>

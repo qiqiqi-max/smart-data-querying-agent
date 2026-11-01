@@ -703,11 +703,11 @@ async def run_demo_query(
         yield writer({"type": "progress", "step": "校验SQL", "status": "success"})
 
         yield writer({"type": "progress", "step": "执行SQL", "status": "running"})
-        result = await dw_mysql_repository.run(sql)
+        result, truncated = await dw_mysql_repository.run(sql)
         yield writer({"type": "progress", "step": "执行SQL", "status": "success"})
-        yield writer({"type": "result", "data": result})
+        yield writer({"type": "result", "data": result, "truncated": truncated})
 
-        summary = summarize_result(result)
+        summary = summarize_result(result, truncated=truncated)
         await query_history_repository.mark_done(history_id, result, summary)
         yield writer({"type": "progress", "step": step, "status": "success"})
     except Exception as exc:

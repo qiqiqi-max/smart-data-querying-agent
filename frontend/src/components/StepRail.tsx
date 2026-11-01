@@ -2,7 +2,7 @@
  * 智能体执行流程组件
  * 用紧凑的轨迹列表替代大画布流程图，更适合工作台场景
  */
-import { Check, Circle, LoaderCircle, X } from "lucide-react";
+import { Check, Circle, LoaderCircle, Square, X } from "lucide-react";
 import { cn, formatTime } from "../lib/format";
 import type { ProgressStatus, StepState } from "../types/agent";
 
@@ -21,7 +21,7 @@ const stepOrder = [
   "执行SQL",
 ];
 
-type FlowStatus = ProgressStatus | "pending" | "skipped";
+type FlowStatus = ProgressStatus | "pending" | "skipped" | "stopped";
 
 function getStatusMap(steps: StepState[]) {
   return steps.reduce<Record<string, StepState>>((map, item) => {
@@ -34,12 +34,15 @@ function statusFor(
   step: string,
   map: Record<string, StepState>,
   flowFinished: boolean,
+  stopped: boolean,
 ): FlowStatus {
   if (flowFinished && step === "校正SQL" && !map[step]) {
     return "skipped";
   }
 
-  return map[step]?.status ?? "pending";
+  const status = map[step]?.status ?? "pending";
+  // 用户停止查询后，停在半途的步骤不再显示为运行中
+  return stopped && status === "running" ? "stopped" : status;
 }
 
 function StatusIcon({ status }: { status: FlowStatus }) {
@@ -52,19 +55,28 @@ function StatusIcon({ status }: { status: FlowStatus }) {
   if (status === "error") {
     return <X className="h-4 w-4" aria-hidden="true" />;
   }
+  if (status === "stopped") {
+    return <Square className="h-3.5 w-3.5" aria-hidden="true" />;
+  }
   return <Circle className="h-4 w-4" aria-hidden="true" />;
 }
 
-export function StepRail({ steps = [] }: { steps?: StepState[] }) {
+export function StepRail({
+  steps = [],
+  stopped = false,
+}: {
+  steps?: StepState[];
+  stopped?: boolean;
+}) {
   if (steps.length === 0) return null;
 
   const statusMap = getStatusMap(steps);
   const flowFinished = statusMap["执行SQL"]?.status === "success";
   const visibleSteps = stepOrder.filter((step) => !(flowFinished && step === "校正SQL"));
   const completed = visibleSteps.filter(
-    (step) => statusFor(step, statusMap, flowFinished) === "success",
+    (step) => statusFor(step, statusMap, flowFinished, stopped) === "success",
   ).length;
-  const running = steps.find((item) => item.status === "running");
+  const running = stopped ? undefined : steps.find((item) => item.status === "running");
   const latestUpdatedAt = steps.reduce(
     (max, item) => Math.max(max, item.updatedAt),
     steps[0]?.updatedAt ?? Date.now(),
@@ -80,13 +92,13 @@ export function StepRail({ steps = [] }: { steps?: StepState[] }) {
           </div>
         </div>
         <div className="text-xs text-slate-400">
-          {running ? `当前：${running.step}` : "流程已结束"}
+          {running ? `当前：${running.step}` : stopped ? "已停止" : "流程已结束"}
         </div>
       </div>
 
       <div className="mt-3 space-y-2">
         {visibleSteps.map((step) => {
-          const status = statusFor(step, statusMap, flowFinished);
+          const status = statusFor(step, statusMap, flowFinished, stopped);
           return (
             <div
               key={step}
@@ -97,6 +109,7 @@ export function StepRail({ steps = [] }: { steps?: StepState[] }) {
                 status === "success" && "border-moss/20 bg-moss/10 text-slate-900",
                 status === "error" && "border-tomato/30 bg-tomato/10 text-tomato",
                 status === "skipped" && "border-slate-200 bg-slate-50 text-slate-400",
+                status === "stopped" && "border-slate-300 bg-slate-100 text-slate-600",
               )}
             >
               <span
@@ -107,6 +120,7 @@ export function StepRail({ steps = [] }: { steps?: StepState[] }) {
                   status === "success" && "bg-moss/15 text-moss",
                   status === "error" && "bg-tomato/15 text-tomato",
                   status === "skipped" && "bg-slate-100 text-slate-400",
+                  status === "stopped" && "bg-slate-200 text-slate-500",
                 )}
               >
                 <StatusIcon status={status} />

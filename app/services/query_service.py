@@ -130,7 +130,10 @@ class QueryService:
                     if chunk.get("type") == "result":
                         has_result = True
                         data = chunk.get("data")
-                        summary = summarize_result(data)
+                        # 截断标记不单独落库，体现在持久化的摘要文案里
+                        summary = summarize_result(
+                            data, truncated=bool(chunk.get("truncated"))
+                        )
                         await self.query_history_repository.mark_done(
                             history_id, data, summary
                         )
