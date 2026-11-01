@@ -126,6 +126,24 @@ class QueryHistoryRepository:
         await self.session.commit()
         return result.rowcount or 0
 
+    async def mark_interrupted(self, history_id: str) -> bool:
+        """把客户端中途断开的运行记录标记为已停止，已结束的记录保持不变。"""
+        result = await self.session.execute(
+            update(QueryHistoryMySQL)
+            .where(
+                QueryHistoryMySQL.id == history_id,
+                QueryHistoryMySQL.status == "running",
+            )
+            .values(
+                status="error",
+                summary="已停止本次查询。",
+                error="客户端中止或连接中断",
+                updated_at=datetime.now(),
+            )
+        )
+        await self.session.commit()
+        return bool(result.rowcount)
+
     async def list_recent(self, limit: int = 20) -> list[QueryHistory]:
         """按更新时间倒序读取最近问数记录"""
 

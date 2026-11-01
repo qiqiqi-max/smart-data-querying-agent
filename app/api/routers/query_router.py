@@ -8,8 +8,10 @@
 
 from typing import Annotated
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.responses import StreamingResponse
+from starlette.types import Receive, Scope, Send
 
 from app.api.dependencies import get_query_history_repository, get_query_service
 from app.api.schemas.query_history_schema import QueryHistoryItem
@@ -23,6 +25,24 @@ from app.services.query_service import QueryService
 # 当前模块只维护查询相关接口，避免后续所有 API 都挤在 main.py 中
 query_router = APIRouter()
 
+# 关闭生成器时等待收尾逻辑的最长时间
+STREAM_CLOSE_TIMEOUT_SECONDS = 10
+
+
+class ClosingStreamingResponse(StreamingResponse):
+    """响应结束后显式关闭生成器，客户端断开时也能执行生成器的收尾逻辑"""
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            # Starlette 检测到断开时只取消发送任务，不关闭 body_iterator，
+            # 生成器会停在 yield 处，直到被垃圾回收才执行收尾
+            aclose = getattr(self.body_iterator, "aclose", None)
+            if aclose is not None:
+                with anyio.move_on_after(STREAM_CLOSE_TIMEOUT_SECONDS, shield=True):
+                    await aclose()
+
 
 @query_router.post("/api/query")
 async def query_handler(
@@ -33,7 +53,7 @@ async def query_handler(
 ):
     """接收用户自然语言问题，并流式返回 LangGraph 工作流输出"""
 
-    return StreamingResponse(
+    return ClosingStreamingResponse(
         # query.query 是用户问题字符串；QueryService.query 返回异步生成器供响应逐段消费
         query_service.query(query.query),
         media_type="text/event-stream",

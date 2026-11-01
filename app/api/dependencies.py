@@ -125,5 +125,6 @@ async def get_query_service(
         metric_qdrant_repository=metric_qdrant_repository,
         value_es_repository=value_es_repository,
         query_history_repository=query_history_repository,
+        meta_session_factory=meta_mysql_client_manager.session_factory,
         demo_mode=use_demo_mode,
     )
