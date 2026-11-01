@@ -14,7 +14,10 @@ from starlette.responses import StreamingResponse
 from app.api.dependencies import get_query_history_repository, get_query_service
 from app.api.schemas.query_history_schema import QueryHistoryItem
 from app.api.schemas.query_schema import QuerySchema
-from app.repositories.mysql.meta.query_history_repository import QueryHistoryRepository
+from app.repositories.mysql.meta.query_history_repository import (
+    QueryHistoryRepository,
+    QueryHistoryRunningError,
+)
 from app.services.query_service import QueryService
 
 # 当前模块只维护查询相关接口，避免后续所有 API 都挤在 main.py 中
@@ -71,5 +74,9 @@ async def delete_query_history_handler(
     ],
 ):
     """删除一条查询历史记录。"""
-    if not await query_history_repository.delete(history_id):
+    try:
+        deleted = await query_history_repository.delete(history_id)
+    except QueryHistoryRunningError:
+        raise HTTPException(status_code=409, detail="查询仍在运行，不能删除")
+    if not deleted:
         raise HTTPException(status_code=404, detail="查询记录不存在")

@@ -46,11 +46,18 @@ async def lifespan(app: FastAPI):
     meta_mysql_client_manager.init()
     dw_mysql_client_manager.init()
 
-    async with meta_mysql_client_manager.engine.begin() as connection:
-        await connection.run_sync(QueryHistoryMySQL.__table__.create, checkfirst=True)
+    # 演示模式和完整模式都依赖 Meta MySQL 保存查询历史，连接失败时直接给出明确错误
+    try:
+        async with meta_mysql_client_manager.engine.begin() as connection:
+            await connection.run_sync(
+                QueryHistoryMySQL.__table__.create, checkfirst=True
+            )
 
-    async with meta_mysql_client_manager.session_factory() as session:
-        await QueryHistoryRepository(session).mark_stale_running()
+        async with meta_mysql_client_manager.session_factory() as session:
+            await QueryHistoryRepository(session).mark_stale_running()
+    except Exception as exc:
+        logger.exception("Meta MySQL 初始化失败")
+        raise RuntimeError(f"Meta MySQL 初始化失败：{exc}") from exc
 
     if not app_config.demo_mode:
         missing: list[str] = []

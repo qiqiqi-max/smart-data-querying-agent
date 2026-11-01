@@ -40,7 +40,8 @@ async def validate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
         except Exception as e:
             # 不抛出异常中断图执行，而是把错误写入状态，供条件分支进入 correct_sql
             logger.info(f"SQL语法错误：{str(e)}")
-            writer({"type": "progress", "step": step, "status": "success"})
+            # 校验未通过要如实标记，前端步骤列表会在修正后重新校验时刷新状态
+            writer({"type": "progress", "step": step, "status": "error"})
             attempts = [
                 *state.get("sql_attempts", []),
                 {

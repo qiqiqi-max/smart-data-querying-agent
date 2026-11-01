@@ -15,6 +15,13 @@ from app.entities.query_history import QueryHistory
 from app.models.query_history import QueryHistoryMySQL
 from app.services.result_summary import count_result_rows
 
+# running 状态超过该时长仍未更新，视为服务重启或连接中断遗留的记录
+RUNNING_STALE_MINUTES = 10
+
+
+class QueryHistoryRunningError(Exception):
+    """查询记录仍在运行，不能删除"""
+
 
 class QueryHistoryRepository:
     """封装查询历史的持久化操作"""
@@ -92,15 +99,21 @@ class QueryHistoryRepository:
             raise
 
     async def delete(self, history_id: str) -> bool:
-        """删除指定的查询历史记录。"""
+        """删除指定的查询历史记录，仍在运行的记录不允许删除。"""
         model = await self.session.get(QueryHistoryMySQL, history_id)
         if not model:
             return False
+        # 超过时限仍为 running 的记录视为已中断，允许删除，避免永远删不掉
+        stale_before = datetime.now() - timedelta(minutes=RUNNING_STALE_MINUTES)
+        if model.status == "running" and model.updated_at >= stale_before:
+            raise QueryHistoryRunningError(history_id)
         await self.session.delete(model)
         await self.session.commit()
         return True
 
-    async def mark_stale_running(self, max_age_minutes: int = 10) -> int:
+    async def mark_stale_running(
+        self, max_age_minutes: int = RUNNING_STALE_MINUTES
+    ) -> int:
         """将服务重启前遗留的运行记录标记为失败。"""
         result = await self.session.execute(
             update(QueryHistoryMySQL)

@@ -18,6 +18,11 @@ from sqlglot.errors import ParseError
 class DWMySQLRepository:
     """负责查询数仓真实表结构和字段样例值"""
 
+    # 最终查询的服务端执行时间上限，超时由 MySQL 中断并返回 3024 错误
+    MAX_EXECUTION_TIME_MS = 30_000
+    # 最终查询最多返回的行数，避免大结果集全部读入内存并写入历史记录
+    MAX_RESULT_ROWS = 1000
+
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -38,8 +43,8 @@ class DWMySQLRepository:
         return limit
 
     @staticmethod
-    def _ensure_read_only(sql: str) -> str:
-        """只允许单条 SELECT，避免模型输出修改数据的语句。"""
+    def _parse_read_only(sql: str) -> exp.Query:
+        """解析 SQL，只允许单条只读查询，包括 UNION 等集合查询。"""
         normalized = sql.strip()
         if not normalized:
             raise ValueError("只允许执行单条只读 SELECT 查询")
@@ -48,11 +53,53 @@ class DWMySQLRepository:
         except ParseError as exc:
             raise ValueError("SQL 解析失败") from exc
         statement = statements[0] if len(statements) == 1 else None
-        if not isinstance(statement, exp.Select):
+        # exp.Query 覆盖 SELECT、UNION/INTERSECT/EXCEPT 和带括号的查询
+        if not isinstance(statement, exp.Query):
             raise ValueError("只允许执行单条只读 SELECT 查询")
-        if statement.args.get("locks") or statement.find(exp.Into):
+        # 子查询里的锁定子句同样会加锁，需要在整棵语法树中查找
+        if statement.find(exp.Lock) or statement.find(exp.Into):
             raise ValueError("不允许使用锁定或导出数据的 SELECT 语法")
-        return statement.sql(dialect="mysql")
+        return statement
+
+    @staticmethod
+    def _ensure_read_only(sql: str) -> str:
+        """只允许单条只读查询，避免模型输出修改数据的语句。"""
+        return DWMySQLRepository._parse_read_only(sql).sql(dialect="mysql")
+
+    @staticmethod
+    def _apply_row_limit(statement: exp.Query, max_rows: int) -> exp.Query:
+        """把最外层 LIMIT 收紧到 max_rows，已有更小的 LIMIT 保持不变。"""
+        limit = statement.args.get("limit")
+        current = limit.expression if limit is not None else None
+        if (
+            isinstance(current, exp.Literal)
+            and current.is_int
+            and int(current.this) <= max_rows
+        ):
+            return statement
+        # MySQL 的 LIMIT offset, count 中 offset 是独立参数，这里不受影响
+        statement.set("limit", exp.Limit(expression=exp.Literal.number(max_rows)))
+        return statement
+
+    @staticmethod
+    def _apply_execution_timeout(statement: exp.Query, timeout_ms: int) -> exp.Query:
+        """在首个 SELECT 上加 MAX_EXECUTION_TIME 提示，只作用于本条语句。"""
+        select = statement
+        # UNION 的提示写在最左侧 SELECT 上，带括号的查询需要先拆开
+        while not isinstance(select, exp.Select):
+            select = select.this
+        select.set(
+            "hint",
+            exp.Hint(
+                expressions=[
+                    exp.Anonymous(
+                        this="MAX_EXECUTION_TIME",
+                        expressions=[exp.Literal.number(timeout_ms)],
+                    )
+                ]
+            ),
+        )
+        return statement
 
     async def get_column_types(self, table_name: str) -> dict[str, str]:
         """查询整张表的字段类型，作为 ColumnInfo.type 的真实来源"""
@@ -90,5 +137,8 @@ class DWMySQLRepository:
 
     async def run(self, sql: str) -> list[dict]:
         """执行最终 SQL，并把 SQLAlchemy 行对象转换成前端更易消费的字典列表"""
-        result = await self.session.execute(text(self._ensure_read_only(sql)))
+        statement = self._parse_read_only(sql)
+        statement = self._apply_row_limit(statement, self.MAX_RESULT_ROWS)
+        statement = self._apply_execution_timeout(statement, self.MAX_EXECUTION_TIME_MS)
+        result = await self.session.execute(text(statement.sql(dialect="mysql")))
         return [dict(row) for row in result.mappings().fetchall()]
