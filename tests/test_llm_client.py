@@ -140,3 +140,21 @@ def test_resolve_proxy_follows_requests_env_rules(monkeypatch):
 
     assert _make_llm()._resolve_proxy() == "http://127.0.0.1:7897"
     assert _make_llm(base_url="http://localhost:8000/v1")._resolve_proxy() is None
+
+
+def test_api_key_is_masked_outside_request_headers():
+    llm = _make_llm()
+
+    for text in (repr(llm), str(llm), str(llm.model_dump())):
+        assert "sk-test" not in text
+    assert llm._build_headers()["Authorization"] == "Bearer sk-test"
+
+
+def test_config_repr_hides_secrets():
+    from app.conf.app_config import DBConfig, LLMConfig
+
+    db = DBConfig(host="h", port=1, user="u", password="pw-secret", database="d")
+    llm_config = LLMConfig(model_name="m", api_key="sk-secret", base_url="b")
+
+    assert "pw-secret" not in repr(db)
+    assert "sk-secret" not in repr(llm_config)

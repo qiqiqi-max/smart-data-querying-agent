@@ -6,7 +6,7 @@
 就可以按属性方式读取日志 MySQL Qdrant Embedding Elasticsearch 和 LLM 配置
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -47,7 +47,8 @@ class DBConfig:
     host: str
     port: int
     user: str
-    password: str
+    # 敏感字段不进入 repr，避免打印或记录配置对象时泄露
+    password: str = field(repr=False)
     database: str
 
 
@@ -84,7 +85,7 @@ class LLMConfig:
     """大模型调用配置"""
 
     model_name: str
-    api_key: str
+    api_key: str = field(repr=False)
     base_url: str
 
 

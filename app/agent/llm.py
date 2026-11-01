@@ -15,7 +15,7 @@ import requests
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, SecretStr
 from requests.utils import default_user_agent, get_environ_proxies, select_proxy
 
 from app.conf.app_config import app_config
@@ -28,7 +28,8 @@ class RequestsChatModel(BaseChatModel):
 
     model_name: str
     base_url: str
-    api_key: str
+    # SecretStr 让 repr、日志和 model_dump 只显示掩码，真正发请求时再取明文
+    api_key: SecretStr
     temperature: float = 0
     timeout: int = 120
     # 测试注入用（如 httpx.MockTransport）；为空时按真实网络和代理配置发请求
@@ -57,7 +58,7 @@ class RequestsChatModel(BaseChatModel):
 
     def _build_headers(self) -> dict[str, str]:
         return {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {self.api_key.get_secret_value()}",
             "Content-Type": "application/json",
         }
 
