@@ -1,85 +1,139 @@
 /**
- * 首页空状态组件
- * 介绍系统能力并给出分类示例问题，点击示例自动填入输入框
+ * 首页空状态组件 (B2B BI 驾驶舱风格)
+ * 数据集元信息卡片、指标主题看板与预置分析模版
  */
-import { ArrowUpRight, BarChart3, Flame, Lightbulb, Sparkles, TrendingUp, Users } from "lucide-react";
+import {
+  ArrowRight,
+  Database,
+  Flame,
+  Layers,
+  LineChart,
+  TableProperties,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 
 type EmptyStateProps = {
   examples: string[];
   onUseExample: (example: string) => void;
 };
 
-const FEATURE_TAGS = [
-  { icon: TrendingUp, label: "GMV 与销售趋势", color: "text-emerald-700 bg-emerald-50 border-emerald-200/60" },
-  { icon: Flame, label: "爆款商品排行", color: "text-amber-700 bg-amber-50 border-amber-200/60" },
-  { icon: Users, label: "会员画像分析", color: "text-sky-700 bg-sky-50 border-sky-200/60" },
+// 数仓核心业务主题
+const DOMAINS = [
+  {
+    icon: TrendingUp,
+    name: "交易与 GMV",
+    desc: "大区业绩、销售额达成、环比变化",
+    sample: "统计 2025 年第一季度各大区的 GMV，并按 GMV 从高到低排序",
+  },
+  {
+    icon: Flame,
+    name: "品类与商品",
+    desc: "各品类销量、TOP5 爆品排行",
+    sample: "统计 2025 年 3 月各商品品类的销量和销售额",
+  },
+  {
+    icon: Users,
+    name: "用户与会员",
+    desc: "会员等级分布、客单价与复购分析",
+    sample: "按会员等级统计 2025 年第一季度的订单数和销售额",
+  },
+  {
+    icon: LineChart,
+    name: "区域透视",
+    desc: "重点省市销量拆解、区域下钻",
+    sample: "查询华东地区 2025 年第一季度销售额最高的前 5 个商品",
+  },
 ];
 
 export function EmptyState({ examples, onUseExample }: EmptyStateProps) {
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-4 py-8 animate-fade-in">
-      {/* 头部微光引导 */}
-      <div className="flex flex-col items-center text-center">
-        <div className="relative mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-moss-700 via-moss-600 to-teal-500 text-white shadow-glow">
-          <BarChart3 className="h-7 w-7" aria-hidden="true" />
-          <div className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[10px] text-slate-900 ring-2 ring-white">
-            <Sparkles className="h-2.5 w-2.5" />
+    <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col justify-center py-6">
+      {/* 顶部数仓仪表盘控制台标头 */}
+      <div className="border border-slate-200 bg-white p-5 rounded-lg shadow-subtle">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded bg-brand-50 text-brand-700 border border-brand-200">
+              <TableProperties className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-base font-bold text-slate-900 tracking-tight">
+                电商数仓智能分析引擎 (Text2SQL Agent)
+              </h1>
+              <p className="text-xs text-slate-500 mt-0.5">
+                基于自然语言自动映射数仓元数据，生成经过安全校验的标准 SQL 并输出多维看板
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 font-mono text-[11px] text-slate-500 bg-slate-50 px-2.5 py-1.5 rounded border border-slate-200/80">
+            <Database className="h-3.5 w-3.5 text-brand-600" />
+            <span>SCHEMA: dw_ecommerce</span>
           </div>
         </div>
 
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-          今天想探索哪些数仓经营数据？
-        </h1>
-        <p className="mt-2.5 max-w-lg text-[14px] leading-6 text-slate-500">
-          用自然的中文提问，Agent 会自主识别指标、下钻表结构、校验安全并实时生成报表与图表。
-        </p>
-
-        {/* 亮点功能标签 */}
-        <div className="mt-5 flex flex-wrap justify-center gap-2">
-          {FEATURE_TAGS.map(({ icon: Icon, label, color }) => (
-            <div
-              key={label}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${color}`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              <span>{label}</span>
-            </div>
-          ))}
+        {/* 数仓指标元数据概览 */}
+        <div className="grid grid-cols-2 gap-3 pt-4 sm:grid-cols-4 font-mono">
+          <div className="rounded border border-slate-200 bg-slate-50/50 p-2.5">
+            <div className="text-[10px] text-slate-400 font-bold">FACT_TABLES</div>
+            <div className="mt-1 text-sm font-bold text-slate-800">dwd_order_detail</div>
+          </div>
+          <div className="rounded border border-slate-200 bg-slate-50/50 p-2.5">
+            <div className="text-[10px] text-slate-400 font-bold">DIM_TABLES</div>
+            <div className="mt-1 text-sm font-bold text-slate-800">dim_region, dim_item</div>
+          </div>
+          <div className="rounded border border-slate-200 bg-slate-50/50 p-2.5">
+            <div className="text-[10px] text-slate-400 font-bold">PRIMARY_METRICS</div>
+            <div className="mt-1 text-sm font-bold text-slate-800">GMV, 销量, 订单量</div>
+          </div>
+          <div className="rounded border border-slate-200 bg-slate-50/50 p-2.5">
+            <div className="text-[10px] text-slate-400 font-bold">SAFETY_GUARD</div>
+            <div className="mt-1 text-sm font-bold text-emerald-600">LIMIT ≤ 1000</div>
+          </div>
         </div>
       </div>
 
-      {/* 示例问题网格 */}
-      <div className="mt-10">
-        <div className="mb-3 flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
-            <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
-            快速灵感与热门提问
+      {/* 核心业务主题模板矩阵 */}
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-3">
+          <span className="font-mono text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+            <Layers className="h-3.5 w-3.5 text-slate-400" />
+            业务分析场景模版 (ANALYTICAL_SCENARIOS)
           </span>
-          <span className="text-[11px] text-slate-400">点击自动填充</span>
+          <span className="text-[11px] text-slate-400">点击模版载入指令</span>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          {examples.map((example, idx) => (
-            <button
-              key={example}
-              type="button"
-              onClick={() => onUseExample(example)}
-              className="group relative flex items-start justify-between gap-3 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-moss-500/40 hover:shadow-card-hover focus:outline-none focus:ring-2 focus:ring-moss-500/25"
-            >
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] font-semibold text-slate-500 transition-colors group-hover:bg-moss-50 group-hover:text-moss-700">
-                  {idx + 1}
-                </span>
-                <span className="text-[13px] font-medium leading-relaxed text-slate-700 transition-colors group-hover:text-slate-900">
-                  {example}
-                </span>
-              </div>
-              <ArrowUpRight
-                className="mt-0.5 h-4 w-4 shrink-0 text-slate-300 transition-all duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-moss-600"
-                aria-hidden="true"
-              />
-            </button>
-          ))}
+          {DOMAINS.map((domain) => {
+            const Icon = domain.icon;
+            return (
+              <button
+                key={domain.name}
+                type="button"
+                onClick={() => onUseExample(domain.sample)}
+                className="group flex flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 text-left shadow-subtle transition hover:border-brand-500/50 hover:bg-slate-50/80 hover:shadow-card focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-6 w-6 items-center justify-center rounded bg-slate-100 text-slate-700 group-hover:bg-brand-50 group-hover:text-brand-700">
+                        <Icon className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-900">
+                        {domain.name}
+                      </span>
+                    </div>
+                    <ArrowRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-hover:translate-x-1 group-hover:text-brand-600" />
+                  </div>
+                  <p className="mt-1.5 text-xs text-slate-500">{domain.desc}</p>
+                </div>
+
+                <div className="mt-3 rounded bg-slate-50 p-2 font-mono text-[11px] text-slate-600 border border-slate-100 group-hover:border-brand-100 group-hover:bg-brand-50/30">
+                  {domain.sample}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

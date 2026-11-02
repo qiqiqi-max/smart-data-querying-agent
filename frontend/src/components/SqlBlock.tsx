@@ -1,6 +1,6 @@
 /**
- * SQL 展示组件
- * 模拟 IDE 终端风格，带视窗头部、行号与高对比度排版
+ * SQL 展示组件 (B2B BI 风格)
+ * 工业级高对比终端代码块、行号与精准格式化
  */
 import { Check, Copy, Terminal } from "lucide-react";
 import { useState } from "react";
@@ -10,9 +10,8 @@ export function SqlBlock({ sql }: { sql?: string }) {
 
   if (!sql) {
     return (
-      <div className="flex flex-col items-center justify-center px-4 py-12 text-center text-sm text-slate-400">
-        <Terminal className="h-8 w-8 text-slate-300 mb-2" />
-        <p>本次查询未记录 SQL，重新发起一次查询即可查看。</p>
+      <div className="p-8 text-center font-mono text-xs text-slate-400">
+        [NO_QUERY_RECORDED] 本次执行未保留生成的 SQL。
       </div>
     );
   }
@@ -26,44 +25,34 @@ export function SqlBlock({ sql }: { sql?: string }) {
   const lines = sql.trim().split("\n");
 
   return (
-    <div className="overflow-hidden bg-[#0d1117] text-slate-100">
-      {/* 终端头部装饰条 */}
-      <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-2">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f56]" />
-            <span className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
-            <span className="h-2.5 w-2.5 rounded-full bg-[#27c93f]" />
-          </div>
-          <span className="ml-2 font-mono text-[11px] text-slate-400">
-            executed_query.sql
-          </span>
+    <div className="bg-[#18181b] text-slate-100 font-mono text-xs">
+      {/* 终端控制头 */}
+      <div className="flex items-center justify-between border-b border-zinc-800 bg-[#121214] px-3 py-1.5 text-[11px]">
+        <div className="flex items-center gap-2 text-zinc-400">
+          <Terminal className="h-3.5 w-3.5 text-brand-500" />
+          <span>QUERY_CONSOLE // ANSI-SQL</span>
         </div>
 
         <button
           type="button"
           onClick={onCopy}
-          className="flex items-center gap-1 rounded px-2 py-0.5 font-mono text-[11px] text-slate-400 transition hover:bg-white/10 hover:text-white"
+          className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 hover:bg-zinc-700 hover:text-white"
         >
-          {copied ? (
-            <Check className="h-3 w-3 text-emerald-400" />
-          ) : (
-            <Copy className="h-3 w-3" />
-          )}
-          <span>{copied ? "已复制" : "复制"}</span>
+          {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+          <span>{copied ? "COPIED" : "COPY"}</span>
         </button>
       </div>
 
       {/* SQL 视图与行号 */}
-      <div className="max-h-[380px] overflow-auto p-4 font-mono text-[13px] leading-6">
+      <div className="max-h-[380px] overflow-auto p-3 leading-5">
         <table className="w-full border-collapse">
           <tbody>
             {lines.map((line, idx) => (
-              <tr key={idx} className="hover:bg-white/[0.04]">
-                <td className="w-8 select-none pr-4 text-right text-[11px] text-slate-600">
+              <tr key={idx} className="hover:bg-zinc-800/40">
+                <td className="w-8 select-none pr-3 text-right text-[10px] text-zinc-600">
                   {idx + 1}
                 </td>
-                <td className="whitespace-pre-wrap break-all text-slate-200">
+                <td className="whitespace-pre-wrap break-all text-emerald-300">
                   {line || " "}
                 </td>
               </tr>

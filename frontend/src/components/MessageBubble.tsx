@@ -1,8 +1,8 @@
 /**
- * 聊天消息组件
- * 用户问题显示为右侧气泡；智能体回答显示为卡片，包含摘要、执行轨迹和结果面板
+ * 聊天消息组件 (B2B BI 风格)
+ * 工业结构化卡片、指令摘要、节点追踪与多维报表面板
  */
-import { Bot, CheckCircle2, Copy } from "lucide-react";
+import { Check, Copy, Database, Terminal, User } from "lucide-react";
 import { useState } from "react";
 import { cn, formatTime } from "../lib/format";
 import type { ChatMessage } from "../types/agent";
@@ -21,26 +21,24 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
 
   if (message.role === "user") {
     return (
-      <article className="group flex flex-col items-end animate-slide-up">
-        <div className="flex items-end gap-2 max-w-[88%] sm:max-w-[80%]">
+      <article className="group flex flex-col items-end">
+        <div className="flex items-center gap-1.5 max-w-[90%] sm:max-w-[85%]">
           <button
             type="button"
             onClick={copyPrompt}
-            className="mb-1 rounded-lg p-1 text-slate-300 opacity-0 transition-opacity hover:bg-slate-100 hover:text-slate-600 group-hover:opacity-100"
-            title="复制问题"
+            className="rounded p-1 text-slate-400 opacity-0 transition hover:bg-slate-200 hover:text-slate-700 group-hover:opacity-100"
+            title="复制指令"
           >
-            {copied ? (
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-            ) : (
-              <Copy className="h-3.5 w-3.5" />
-            )}
+            {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
           </button>
-          <div className="relative overflow-hidden rounded-2xl rounded-br-sm bg-gradient-to-tr from-slate-900 to-slate-800 px-4 py-3 text-[14px] leading-relaxed text-white shadow-card">
+          <div className="rounded border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-sans text-slate-100 shadow-subtle">
+            <div className="flex items-center gap-1.5 border-b border-slate-700/80 pb-1 mb-1 font-mono text-[10px] text-slate-400">
+              <User className="h-2.5 w-2.5" />
+              <span>USER_PROMPT //</span>
+              <span>{formatTime(message.createdAt)}</span>
+            </div>
             <p className="whitespace-pre-wrap">{message.content}</p>
           </div>
-        </div>
-        <div className="mt-1 flex items-center gap-1.5 pr-2 text-[11px] text-slate-400">
-          <span>{formatTime(message.createdAt)}</span>
         </div>
       </article>
     );
@@ -50,39 +48,27 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
     message.status === "error" && message.sql && message.result === undefined;
 
   return (
-    <article className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-4 sm:p-5 shadow-card backdrop-blur-sm animate-slide-up transition-shadow duration-200 hover:shadow-card-hover">
-      {/* 头部 Agent 标识 */}
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-tr from-moss-700 to-teal-500 text-white shadow-sm ring-1 ring-moss-700/20">
-            <Bot className="h-4 w-4" aria-hidden="true" />
-            {message.status === "streaming" && (
-              <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-teal-500" />
-              </span>
-            )}
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[13px] font-semibold text-slate-900">
-                问数智能体
-              </span>
-              <span className="rounded bg-slate-100 px-1 py-0.2 text-[10px] font-mono font-medium text-slate-500">
-                SQL-Agent
-              </span>
-            </div>
-          </div>
+    <article className="rounded border border-slate-200 bg-white p-3.5 shadow-subtle">
+      {/* 消息标头 */}
+      <div className="flex items-center justify-between border-b border-slate-100 pb-2 font-mono text-xs">
+        <div className="flex items-center gap-2">
+          <span className="flex h-5 w-5 items-center justify-center rounded bg-brand-50 text-brand-700 font-bold text-[10px] border border-brand-200">
+            AG
+          </span>
+          <span className="font-bold text-slate-800">AGENT_RESPONSE</span>
+          <span className="rounded bg-slate-100 px-1 py-0.2 text-[10px] text-slate-500">
+            TEXT2SQL
+          </span>
         </div>
-        <span className="font-mono text-[11px] text-slate-400">
+        <span className="text-[11px] text-slate-400">
           {formatTime(message.createdAt)}
         </span>
       </div>
 
-      {/* 消息文本描述 */}
+      {/* 结果摘要 */}
       <div
         className={cn(
-          "mt-3 text-[14px] leading-relaxed",
+          "mt-2.5 text-xs leading-relaxed",
           message.status === "stopped" ? "text-slate-500 italic" : "text-slate-800",
         )}
       >
@@ -91,11 +77,9 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
 
       {/* 错误提示 */}
       {message.error && (
-        <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-rose-200/80 bg-rose-50/60 p-3 text-[13px] leading-relaxed text-rose-700">
-          <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-rose-200 text-rose-800 text-[10px] font-bold">
-            !
-          </span>
-          <div className="flex-1 break-words">{message.error}</div>
+        <div className="mt-2.5 rounded border border-rose-200 bg-rose-50 p-2.5 font-mono text-xs text-rose-700">
+          <span className="font-bold">[ERROR] </span>
+          <span>{message.error}</span>
         </div>
       )}
 
@@ -107,7 +91,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
         finishedAt={message.finishedAt}
       />
 
-      {/* 查询结果大屏面板 */}
+      {/* 查询结果报表面板 */}
       {message.result !== undefined && (
         <ResultPanel
           data={message.result}
@@ -119,9 +103,9 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
 
       {/* 失败时查看生成的 SQL */}
       {failedWithSql && (
-        <details className="mt-3 overflow-hidden rounded-xl border border-slate-200/80 bg-slate-50/50">
-          <summary className="cursor-pointer select-none px-3.5 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100/70">
-            查看异常前生成的 SQL 语句
+        <details className="mt-2.5 rounded border border-slate-200 bg-slate-50">
+          <summary className="cursor-pointer px-3 py-1.5 font-mono text-xs text-slate-600 hover:bg-slate-100">
+            [INSPECT] 查看异常时生成的 SQL
           </summary>
           <SqlBlock sql={message.sql} />
         </details>

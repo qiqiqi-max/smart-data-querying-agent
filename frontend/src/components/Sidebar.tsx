@@ -1,15 +1,15 @@
 /**
- * 左侧边栏
- * 品牌、新对话、最近分析记录和接口信息；桌面端常驻，窄屏下作为抽屉打开
+ * 左侧边栏 (B2B BI 风格)
+ * 工业级灰白布局、数仓连接拓扑、会话记录与多维指标状态
  */
 import {
   Activity,
-  BarChart3,
   CheckCircle2,
   Database,
   History,
+  Layers,
   LoaderCircle,
-  MessageSquarePlus,
+  Plus,
   Server,
   Trash2,
   X,
@@ -29,28 +29,28 @@ type SidebarProps = {
   onClose?: () => void;
 };
 
-const STATUS_CONFIG: Record<
+const STATUS_MAP: Record<
   RunStatus,
-  { text: string; label: string; icon: typeof CheckCircle2 }
+  { label: string; tagClass: string; icon: typeof CheckCircle2 }
 > = {
   running: {
-    text: "text-amber-600",
-    label: "运行中",
+    label: "QUERYING",
+    tagClass: "bg-amber-50 text-amber-700 border-amber-200",
     icon: LoaderCircle,
   },
   done: {
-    text: "text-emerald-600",
-    label: "完成",
+    label: "SUCCESS",
+    tagClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
     icon: CheckCircle2,
   },
   error: {
-    text: "text-rose-600",
-    label: "异常",
+    label: "ERROR",
+    tagClass: "bg-rose-50 text-rose-700 border-rose-200",
     icon: XCircle,
   },
   stopped: {
-    text: "text-slate-400",
-    label: "已停止",
+    label: "ABORTED",
+    tagClass: "bg-slate-100 text-slate-600 border-slate-200",
     icon: Activity,
   },
 };
@@ -69,28 +69,24 @@ export function Sidebar({
   const errorCount = recentRuns.filter((run) => run.status === "error").length;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-slate-50/70 backdrop-blur-md">
-      {/* 品牌 Header */}
-      <div className="flex items-center justify-between border-b border-slate-200/60 px-4 py-4">
-        <div className="flex items-center gap-2.5">
-          <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-moss-600 to-moss-800 text-white shadow-sm ring-1 ring-black/5">
-            <BarChart3 className="h-5 w-5" aria-hidden="true" />
-            <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
-            </span>
+    <div className="flex h-full min-h-0 flex-col bg-white border-r border-slate-200">
+      {/* 品牌 / 数仓工作空间标头 */}
+      <div className="flex items-center justify-between border-b border-slate-200 px-3.5 py-3 bg-slate-50/50">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded bg-brand-700 text-white shadow-subtle">
+            <Database className="h-4 w-4" />
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm font-bold tracking-tight text-slate-900">
-                DataQuery
+          <div>
+            <div className="flex items-center gap-1.5 leading-none">
+              <span className="font-mono text-xs font-bold text-slate-900 tracking-tight">
+                METASPACE
               </span>
-              <span className="rounded-md bg-moss-50 px-1.5 py-0.5 text-[10px] font-semibold text-moss-700 ring-1 ring-inset ring-moss-600/20">
-                Agent
+              <span className="rounded bg-slate-200/80 px-1 py-0.2 font-mono text-[9px] font-semibold text-slate-600">
+                PROD
               </span>
             </div>
-            <p className="truncate text-[11px] text-slate-500">
-              电商数仓智能问数
+            <p className="mt-1 font-mono text-[10px] text-slate-400">
+              DW://dw_ecommerce
             </p>
           </div>
         </div>
@@ -99,99 +95,81 @@ export function Sidebar({
           <button
             type="button"
             onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-200/60 hover:text-slate-700"
+            className="grid h-6 w-6 place-items-center rounded text-slate-400 hover:bg-slate-200/60 hover:text-slate-700"
             aria-label="关闭侧边栏"
           >
-            <X className="h-4 w-4" aria-hidden="true" />
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         )}
       </div>
 
-      {/* 新对话按钮 */}
-      <div className="px-3 pt-4">
+      {/* 新建问数会话按钮 */}
+      <div className="p-2.5">
         <button
           type="button"
           onClick={onNewChat}
           disabled={isStreaming}
-          className="group relative flex h-10 w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-slate-900 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-slate-800 hover:shadow-card focus:outline-none focus:ring-2 focus:ring-slate-900/20 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+          className="flex h-8 w-full items-center justify-center gap-1.5 rounded border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 shadow-subtle transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500/20 active:bg-slate-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
         >
-          <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/10 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-          <MessageSquarePlus className="h-4 w-4 transition-transform group-hover:scale-110" aria-hidden="true" />
-          <span>开启新对话</span>
+          <Plus className="h-3.5 w-3.5 stroke-[2.5]" aria-hidden="true" />
+          <span>新建分析查询</span>
         </button>
       </div>
 
-      {/* 最近分析列表 */}
-      <div className="mt-4 flex items-center justify-between px-4 pb-2 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-        <span className="flex items-center gap-1.5">
+      {/* 历史分析查询列表 */}
+      <div className="flex items-center justify-between px-3 py-1.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase font-mono">
+        <span className="flex items-center gap-1">
           <History className="h-3 w-3" />
-          最近分析
+          QUERY_LOGS
         </span>
-        <span className="rounded-full bg-slate-200/70 px-1.5 py-0.2 text-[10px] font-medium text-slate-600">
-          {recentRuns.length}
-        </span>
+        <span>{recentRuns.length} ITEMS</span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {recentRuns.length === 0 ? (
-          <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
-            <div className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-400">
-              <Database className="h-5 w-5" />
-            </div>
-            <p className="mt-3 text-xs font-medium text-slate-600">暂无历史查询</p>
-            <p className="mt-1 text-[11px] text-slate-400">
-              在右侧输入问题开始分析数据
-            </p>
+          <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+            <Layers className="h-6 w-6 text-slate-300" />
+            <p className="mt-2 text-xs font-medium text-slate-500">暂无查询日志</p>
           </div>
         ) : (
-          <ul className="space-y-1">
+          <div className="space-y-1">
             {recentRuns.map((run) => {
-              const config = STATUS_CONFIG[run.status];
+              const statusCfg = STATUS_MAP[run.status];
               const isActive = run.id === activeRunId;
-              const Icon = config.icon;
+              const Icon = statusCfg.icon;
 
               return (
-                <li key={run.id} className="group relative">
+                <div key={run.id} className="group relative">
                   <button
                     type="button"
                     onClick={() => onOpenRun(run)}
                     disabled={isStreaming}
                     className={cn(
-                      "w-full rounded-xl p-2.5 pr-8 text-left transition-all duration-150 disabled:cursor-not-allowed",
+                      "w-full rounded border p-2 text-left transition-all duration-100 disabled:cursor-not-allowed",
                       isActive
-                        ? "bg-white shadow-card ring-1 ring-slate-200/80"
-                        : "hover:bg-slate-200/50 hover:text-slate-900",
+                        ? "border-brand-500/40 bg-brand-50/50 text-slate-900 shadow-subtle"
+                        : "border-transparent hover:border-slate-200 hover:bg-slate-50 text-slate-700",
                     )}
                   >
-                    <div className="flex items-start gap-2">
-                      <div className="mt-0.5 shrink-0">
-                        {run.status === "running" ? (
-                          <LoaderCircle className="h-3.5 w-3.5 animate-spin text-amber-500" />
-                        ) : (
-                          <Icon className={cn("h-3.5 w-3.5", config.text)} />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className={cn(
-                          "truncate text-[13px] font-medium",
-                          isActive ? "text-slate-900 font-semibold" : "text-slate-700 group-hover:text-slate-900"
-                        )}>
-                          {run.query}
-                        </p>
-                        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-400">
-                          <span>{formatTime(run.createdAt)}</span>
-                          <span>·</span>
-                          {run.status === "done" ? (
-                            <span className="font-mono text-slate-500">
-                              {run.rows ?? 0} 行
-                            </span>
-                          ) : (
-                            <span className={cn("font-medium", config.text)}>
-                              {config.label}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                    <div className="flex items-center justify-between gap-1">
+                      <span className={cn(
+                        "rounded px-1 py-0.2 font-mono text-[9px] font-bold border",
+                        statusCfg.tagClass
+                      )}>
+                        {statusCfg.label}
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400">
+                        {formatTime(run.createdAt)}
+                      </span>
+                    </div>
+
+                    <p className="mt-1 line-clamp-1 text-xs font-medium leading-snug">
+                      {run.query}
+                    </p>
+
+                    <div className="mt-1 flex items-center justify-between font-mono text-[10px] text-slate-400">
+                      <span>{run.rows !== undefined ? `${run.rows} rows` : "0 rows"}</span>
+                      {run.sql && <span className="text-slate-500 font-semibold">[SQL]</span>}
                     </div>
                   </button>
 
@@ -199,43 +177,40 @@ export function Sidebar({
                     type="button"
                     disabled={run.status === "running"}
                     onClick={() => onDeleteRun(run)}
-                    className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-lg text-slate-400 opacity-0 transition-all hover:bg-rose-50 hover:text-rose-600 focus:opacity-100 group-hover:opacity-100 disabled:hidden"
-                    title="删除记录"
+                    className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded text-slate-300 opacity-0 transition hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 disabled:hidden"
+                    title="移除记录"
                     aria-label={`删除 ${run.query}`}
                   >
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Trash2 className="h-3 w-3" aria-hidden="true" />
                   </button>
-                </li>
+                </div>
               );
             })}
-          </ul>
+          </div>
         )}
       </div>
 
-      {/* 底部系统状态与接口信息 */}
-      <div className="border-t border-slate-200/60 bg-white/50 p-3 text-xs backdrop-blur-sm">
-        <div className="rounded-lg bg-slate-100/70 p-2.5">
-          <div className="flex items-center justify-between text-slate-600">
-            <span className="flex items-center gap-1.5 text-[11px] font-medium">
-              <Server className="h-3.5 w-3.5 text-slate-500" />
-              API 端点
-            </span>
-            <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              就绪
-            </span>
-          </div>
-          <p className="mt-1 truncate font-mono text-[10px] text-slate-500" title={apiBaseUrl}>
-            {apiBaseUrl}
-          </p>
-
-          <div className="mt-2.5 flex items-center justify-between border-t border-slate-200/60 pt-2 text-[10px] text-slate-500">
-            <span>记录 {recentRuns.length} 条</span>
-            <span className="space-x-1">
-              <span className="text-emerald-600">● 成功 {doneCount}</span>
-              {errorCount > 0 && <span className="text-rose-600">● 失败 {errorCount}</span>}
-            </span>
-          </div>
+      {/* 底部引擎拓扑与状态 */}
+      <div className="border-t border-slate-200 bg-slate-50/70 p-2.5 font-mono text-[11px]">
+        <div className="flex items-center justify-between text-slate-500">
+          <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-slate-400">
+            <Server className="h-3 w-3" />
+            ENGINE_INFO
+          </span>
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            ONLINE
+          </span>
+        </div>
+        <div className="mt-1.5 truncate rounded bg-white px-2 py-1 text-[10px] text-slate-600 border border-slate-200">
+          {apiBaseUrl}
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-200/60">
+          <span>LOGS: {recentRuns.length}</span>
+          <span className="space-x-1.5">
+            <span className="text-emerald-700">PASS:{doneCount}</span>
+            {errorCount > 0 && <span className="text-rose-600">ERR:{errorCount}</span>}
+          </span>
         </div>
       </div>
     </div>

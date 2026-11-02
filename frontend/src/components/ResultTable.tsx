@@ -1,13 +1,13 @@
 /**
- * 查询结果表格组件
- * 按列类型渲染结果：数值列右对齐并格式化，表头吸顶，斑马纹与悬浮高亮，超出高度滚动
+ * 查询结果表格组件 (B2B BI 风格)
+ * 工业级致密排版、等宽网格线、类型徽章与清晰对齐
  */
 import { Hash, Type } from "lucide-react";
 import { cn } from "../lib/format";
 import { formatNumber, parseNumber, type ColumnInfo, type Row } from "../lib/resultData";
 
 function formatCell(value: unknown, column: ColumnInfo) {
-  if (value === null || value === undefined || value === "") return "-";
+  if (value === null || value === undefined || value === "") return <span className="text-slate-300">NULL</span>;
   if (column.kind === "number") {
     const number = parseNumber(value);
     if (number !== null) return formatNumber(number);
@@ -18,13 +18,13 @@ function formatCell(value: unknown, column: ColumnInfo) {
 
 export function ResultTable({ rows, columns }: { rows: Row[]; columns: ColumnInfo[] }) {
   return (
-    <div className="max-h-[420px] overflow-auto">
-      <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
-        <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm">
+    <div className="max-h-[460px] overflow-auto border-t border-slate-200">
+      <table className="min-w-full border-collapse text-left text-xs">
+        <thead className="sticky top-0 z-10 bg-slate-100 border-b border-slate-300">
           <tr>
             <th
               scope="col"
-              className="w-12 border-b border-slate-200 px-3 py-2.5 text-center font-mono text-[11px] font-semibold text-slate-400"
+              className="w-10 border-r border-slate-200 px-2 py-2 text-center font-mono text-[10px] font-bold text-slate-500 uppercase"
             >
               #
             </th>
@@ -33,48 +33,45 @@ export function ResultTable({ rows, columns }: { rows: Row[]; columns: ColumnInf
                 key={column.name}
                 scope="col"
                 className={cn(
-                  "whitespace-nowrap border-b border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-600",
+                  "border-r border-slate-200 px-3 py-2 font-mono text-[11px] font-bold text-slate-700",
                   column.kind === "number" && "text-right",
                 )}
               >
                 <div
                   className={cn(
-                    "inline-flex items-center gap-1.5",
+                    "inline-flex items-center gap-1",
                     column.kind === "number" && "flex-row-reverse",
                   )}
                 >
-                  {column.kind === "number" ? (
-                    <Hash className="h-3 w-3 text-slate-400" />
-                  ) : (
-                    <Type className="h-3 w-3 text-slate-400" />
-                  )}
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    [{column.kind === "number" ? "NUM" : "STR"}]
+                  </span>
                   <span>{column.name}</span>
                 </div>
               </th>
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-slate-200 font-mono text-xs">
           {rows.map((row, rowIndex) => (
             <tr
               key={rowIndex}
               className={cn(
-                "transition-colors",
+                "transition hover:bg-brand-50/40",
                 rowIndex % 2 === 0 ? "bg-white" : "bg-slate-50/50",
-                "hover:bg-teal-50/40",
               )}
             >
-              <td className="border-b border-slate-100 px-3 py-2.5 text-center font-mono text-[11px] text-slate-400">
+              <td className="border-r border-slate-200 px-2 py-1.5 text-center text-[10px] text-slate-400 select-none">
                 {rowIndex + 1}
               </td>
               {columns.map((column) => (
                 <td
                   key={column.name}
                   className={cn(
-                    "whitespace-nowrap border-b border-slate-100 px-4 py-2.5 text-slate-700",
+                    "border-r border-slate-200 px-3 py-1.5 text-slate-800 whitespace-nowrap",
                     column.kind === "number"
-                      ? "text-right font-mono text-[13px] tabular-nums font-medium text-slate-800"
-                      : "text-[13px]",
+                      ? "text-right tabular-nums font-semibold text-slate-900"
+                      : "font-sans text-xs",
                   )}
                 >
                   {formatCell(row[column.name], column)}

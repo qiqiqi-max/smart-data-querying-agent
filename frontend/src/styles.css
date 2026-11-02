@@ -1,7 +1,3 @@
-/**
- * 全局样式入口
- * 加载 Tailwind 层并定义页面基础样式与背景纹理
- */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -26,45 +22,33 @@ body,
 
 body {
   margin: 0;
-  background-color: #f8fafc;
+  background-color: #f1f5f9;
   color: #0f172a;
   overflow: hidden;
-  background-image:
-    radial-gradient(at 0% 0%, rgba(204, 251, 241, 0.4) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(241, 245, 249, 0.8) 0px, transparent 50%);
-  background-attachment: fixed;
 }
 
-button,
-textarea,
-select,
-input {
-  font: inherit;
-}
-
-::selection {
-  background: rgba(15, 118, 110, 0.15);
-  color: #0f766e;
-}
-
-/* 优雅细致的现代化滚动条 */
+/* 紧凑而高效的专业数据滚动条 */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: #f8fafc;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.35);
-  border-radius: 9999px;
-  transition: background-color 0.2s ease;
+  background: #cbd5e1;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.6);
+  background: #94a3b8;
+}
+
+::selection {
+  background: #dbeafe;
+  color: #1e40af;
 }
 
 @media (prefers-reduced-motion: reduce) {

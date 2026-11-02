@@ -345,39 +345,63 @@ export default function App() {
       </div>
 
       {/* 主工作区 */}
-      <main className="flex min-w-0 flex-1 flex-col">
-        {/* 顶部操作栏与状态条 */}
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/70 px-4 backdrop-blur-md">
+      <main className="flex min-w-0 flex-1 flex-col bg-slate-100/70">
+        {/* 顶部专业 BI 控制台 Bar */}
+        <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
               disabled={isStreaming}
-              className="grid h-8 w-8 place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 md:hidden disabled:cursor-not-allowed disabled:opacity-50"
+              className="grid h-7 w-7 place-items-center rounded border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 md:hidden disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="打开侧边栏"
             >
-              <Menu className="h-5 w-5" aria-hidden="true" />
+              <Menu className="h-4 w-4" aria-hidden="true" />
             </button>
 
             <div className="flex items-center gap-2">
-              <span className="flex h-2 w-2 rounded-full bg-emerald-500 ring-4 ring-emerald-500/20" />
-              <span className="text-xs font-medium text-slate-700">
-                {isStreaming ? "Agent 思考与查询中..." : "系统就绪"}
+              <span className="font-mono text-xs font-bold tracking-tight text-slate-800">
+                BI_CONSOLE //
               </span>
+              <span className="text-xs font-medium text-slate-600">
+                数仓智能问数工作台
+              </span>
+            </div>
+
+            <div className="hidden items-center gap-2 sm:flex">
+              <span className="h-3 w-[1px] bg-slate-200" />
+              <div className="flex items-center gap-1.5 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>数仓引擎已连接</span>
+              </div>
+              <div className="flex items-center gap-1.5 rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-600">
+                <span>MODEL: DeepSeek-V3</span>
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-[11px] text-slate-500 font-mono">
+              <span className={cn(
+                "inline-block h-2 w-2 rounded-full",
+                isStreaming ? "bg-amber-500 animate-ping" : "bg-emerald-500"
+              )} />
+              <span>{isStreaming ? "EXECUTING" : "IDLE"}</span>
+            </div>
+
             {messages.length > 0 && (
-              <button
-                type="button"
-                onClick={newChat}
-                disabled={isStreaming}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 shadow-subtle transition hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Eraser className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
-                <span>清空会话</span>
-              </button>
+              <>
+                <span className="h-3 w-[1px] bg-slate-200" />
+                <button
+                  type="button"
+                  onClick={newChat}
+                  disabled={isStreaming}
+                  className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Eraser className="h-3 w-3 text-slate-400" aria-hidden="true" />
+                  <span>重置画布</span>
+                </button>
+              </>
             )}
           </div>
         </header>
@@ -387,8 +411,8 @@ export default function App() {
           {messages.length === 0 ? (
             <EmptyState examples={examples} onUseExample={fillExample} />
           ) : (
-            <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
-              <div className="space-y-6">
+            <div className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6">
+              <div className="space-y-5">
                 {messages.map((message) => (
                   <MessageBubble key={message.id} message={message} />
                 ))}
@@ -397,9 +421,9 @@ export default function App() {
           )}
         </div>
 
-        {/* 底部输入框 */}
-        <div className="relative shrink-0 border-t border-slate-200/60 bg-gradient-to-t from-white via-white/80 to-transparent p-4 sm:px-6">
-          <div className="mx-auto max-w-4xl">
+        {/* 底部控制台输入区 */}
+        <div className="relative shrink-0 border-t border-slate-200 bg-white p-3 sm:px-6">
+          <div className="mx-auto max-w-5xl">
             <Composer
               value={draft}
               onChange={setDraft}
