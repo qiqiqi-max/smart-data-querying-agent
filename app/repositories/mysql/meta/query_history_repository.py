@@ -11,7 +11,7 @@ from typing import Any
 from sqlalchemy import Connection, desc, inspect, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.entities.query_history import QueryHistory
+from app.entities.query_history import QueryHistory, QueryHistorySummary
 from app.models.query_history import QueryHistoryMySQL
 from app.services.result_summary import count_result_rows
 
@@ -104,6 +104,7 @@ class QueryHistoryRepository:
         model.result = self._json_safe(result)
         model.row_count = count_result_rows(result)
         model.error = None
+        model.response = None
         model.sql = sql
         model.updated_at = datetime.now()
         try:
@@ -122,8 +123,30 @@ class QueryHistoryRepository:
         model.status = "error"
         model.summary = message
         model.error = message
+        model.response = None
         if sql is not None:
             model.sql = sql
+        model.updated_at = datetime.now()
+        try:
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            raise
+
+    async def mark_response(self, history_id: str, response: dict):
+        """Persist a useful business reply without inventing a table or an error."""
+        if response.get("status") not in {"clarify", "unsupported"}:
+            raise ValueError("仅允许保存待补充或数据不足的业务回复")
+        model = await self.session.get(QueryHistoryMySQL, history_id)
+        if not model:
+            return
+        model.status = response["status"]
+        model.summary = response["message"]
+        model.response = self._json_safe(response)
+        model.result = None
+        model.sql = None
+        model.error = None
+        model.row_count = 0
         model.updated_at = datetime.now()
         try:
             await self.session.commit()
@@ -183,15 +206,29 @@ class QueryHistoryRepository:
         await self.session.commit()
         return bool(result.rowcount)
 
-    async def list_recent(self, limit: int = 20) -> list[QueryHistory]:
-        """按更新时间倒序读取最近问数记录"""
+    async def list_recent(self, limit: int = 20) -> list[QueryHistorySummary]:
+        """只查询列表展示所需列，避免加载历史结果 JSON 和 SQL。"""
 
         result = await self.session.execute(
-            select(QueryHistoryMySQL)
-            .order_by(desc(QueryHistoryMySQL.updated_at))
+            select(
+                QueryHistoryMySQL.id,
+                QueryHistoryMySQL.query,
+                QueryHistoryMySQL.status,
+                QueryHistoryMySQL.summary,
+                QueryHistoryMySQL.row_count,
+                QueryHistoryMySQL.error,
+                QueryHistoryMySQL.created_at,
+                QueryHistoryMySQL.updated_at,
+            )
+            .order_by(desc(QueryHistoryMySQL.updated_at), desc(QueryHistoryMySQL.id))
             .limit(limit)
         )
-        return [self.to_entity(model) for model in result.scalars().all()]
+        return [QueryHistorySummary(**row) for row in result.mappings().all()]
+
+    async def get_by_id(self, history_id: str) -> QueryHistory | None:
+        """按需读取单条记录的结果与 SQL。"""
+        model = await self.session.get(QueryHistoryMySQL, history_id)
+        return self.to_entity(model) if model is not None else None
 
     @staticmethod
     def to_entity(model: QueryHistoryMySQL) -> QueryHistory:
@@ -206,6 +243,7 @@ class QueryHistoryRepository:
             row_count=model.row_count,
             error=model.error,
             sql=model.sql,
+            response=model.response,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )

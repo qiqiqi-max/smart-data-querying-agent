@@ -10,8 +10,13 @@ Repository 只关心索引是否存在 ValueInfo 如何写进 ES 以及如何按
 import asyncio
 import json
 import re
+import time
+from collections import OrderedDict
 from dataclasses import asdict
+from functools import lru_cache
 from pathlib import Path
+from threading import RLock
+from uuid import uuid4
 
 import jieba
 from elasticsearch import AsyncElasticsearch
@@ -24,6 +29,14 @@ class ValueESRepository:
     """负责字段取值全文索引的创建 写入和基础检索"""
 
     index_name = "value_index"
+    # 仓储按请求创建，缓存按进程共享；限制不同索引路径的数量，避免无限增长。
+    _local_cache: OrderedDict[Path, tuple[tuple[int, ...], list[dict], float]] = (
+        OrderedDict()
+    )
+    _local_cache_lock = RLock()
+    _local_cache_capacity = 16
+    # Windows 上原地改写后恢复 mtime 可能不改变 stat；最多一秒后强制复核内容。
+    _local_cache_max_age = 1.0
     # value 字段使用 IK 分词，这样地区 会员等级 品类等中文值才能按全文方式检索
     index_mappings = {
         "dynamic": False,
@@ -78,7 +91,19 @@ class ValueESRepository:
                     {"index": {"_index": self.index_name, "_id": value_info.id}}
                 )
                 batch_operations.append(asdict(value_info))
-            await self.client.bulk(operations=batch_operations)
+            response = await self.client.bulk(operations=batch_operations)
+            if response.get("errors"):
+                raise RuntimeError("字段取值索引存在写入失败的记录")
+        await self.client.indices.refresh(index=self.index_name)
+
+    async def reset_index(self):
+        """全量重建前移除旧值，包含配置中已删除的字段。"""
+        if self.local_mode:
+            await asyncio.to_thread(self._write_local, [])
+            return
+        if await self.client.indices.exists(index=self.index_name):
+            await self.client.indices.delete(index=self.index_name)
+        await self.ensure_index()
 
     async def search(
         self, keyword: str, score_threshold: float = 0.6, limit: int = 20
@@ -109,23 +134,56 @@ class ValueESRepository:
             self.local_path.write_text("[]", encoding="utf-8")
 
     def _read_local(self) -> list[dict]:
-        self._ensure_local_index()
-        try:
-            records = json.loads(self.local_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"本地字段值索引损坏：{self.local_path}") from exc
-        if not isinstance(records, list):
-            raise RuntimeError(f"本地字段值索引格式错误：{self.local_path}")
-        return [record for record in records if isinstance(record, dict)]
+        path = self.local_path.resolve()
+        with self._local_cache_lock:
+            self._ensure_local_index()
+            for _ in range(3):
+                version = self._file_version(path)
+                cached = self._local_cache.get(path)
+                if (
+                    cached is not None
+                    and cached[0] == version
+                    and time.monotonic() - cached[2] < self._local_cache_max_age
+                ):
+                    self._local_cache.move_to_end(path)
+                    return cached[1]
+                # 坏文件或读文件失败后不能继续使用旧快照。
+                self._local_cache.pop(path, None)
+                try:
+                    records = json.loads(path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError(f"本地字段值索引损坏：{path}") from exc
+                if not isinstance(records, list):
+                    raise RuntimeError(f"本地字段值索引格式错误：{path}")
+                if self._file_version(path) != version:
+                    continue
+                records = [record for record in records if isinstance(record, dict)]
+                self._local_cache[path] = (version, records, time.monotonic())
+                while len(self._local_cache) > self._local_cache_capacity:
+                    self._local_cache.popitem(last=False)
+                return records
+            raise RuntimeError(f"本地字段值索引正在更新，请重试：{path}")
+
+    @staticmethod
+    def _file_version(path: Path) -> tuple[int, ...]:
+        stat = path.stat()
+        return stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, stat.st_ino
 
     def _write_local(self, records: list[dict]) -> None:
-        self.local_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path = self.local_path.with_suffix(".json.tmp")
-        temporary_path.write_text(
-            json.dumps(records, ensure_ascii=False, separators=(",", ":")),
-            encoding="utf-8",
-        )
-        temporary_path.replace(self.local_path)
+        with self._local_cache_lock:
+            self.local_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary_path = self.local_path.with_name(
+                f"{self.local_path.name}.{uuid4().hex}.tmp"
+            )
+            try:
+                temporary_path.write_text(
+                    json.dumps(records, ensure_ascii=False, separators=(",", ":")),
+                    encoding="utf-8",
+                )
+                temporary_path.replace(self.local_path)
+                self._local_cache.pop(self.local_path.resolve(), None)
+            finally:
+                temporary_path.unlink(missing_ok=True)
 
     def _index_local(self, value_infos: list[ValueInfo]) -> None:
         """把真实 DW 字段值写入本地持久化索引。"""
@@ -144,6 +202,11 @@ class ValueESRepository:
     def _normalize(value: object) -> str:
         return re.sub(r"\s+", "", str(value).casefold())
 
+    @staticmethod
+    @lru_cache(maxsize=4096)
+    def _tokens(normalized: str) -> frozenset[str]:
+        return frozenset(token for token in jieba.lcut(normalized) if token.strip())
+
     @classmethod
     def _score(cls, keyword: str, value: object) -> float:
         normalized_keyword = cls._normalize(keyword)
@@ -158,12 +221,8 @@ class ValueESRepository:
         ):
             return 0.95
 
-        keyword_tokens = {
-            token for token in jieba.lcut(normalized_keyword) if token.strip()
-        }
-        value_tokens = {
-            token for token in jieba.lcut(normalized_value) if token.strip()
-        }
+        keyword_tokens = cls._tokens(normalized_keyword)
+        value_tokens = cls._tokens(normalized_value)
         if not keyword_tokens or not value_tokens:
             return 0.0
         overlap = len(keyword_tokens & value_tokens)

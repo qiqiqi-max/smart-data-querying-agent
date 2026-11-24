@@ -25,17 +25,17 @@ function BarChart({ points }: { points: ChartPoint[] }) {
       {points.map((point, index) => (
         <div
           key={`${point.label}-${index}`}
-          className="grid grid-cols-[minmax(64px,140px)_minmax(0,1fr)_minmax(64px,auto)] items-center gap-3 text-sm"
+          className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] items-center gap-2 text-sm sm:grid-cols-[minmax(80px,160px)_minmax(0,1fr)_minmax(80px,auto)] sm:gap-3"
           title={`${point.label}：${formatNumber(point.value)}`}
         >
           <div className="truncate text-slate-600">{point.label}</div>
           <div className="h-6 rounded bg-slate-100">
             <div
-              className={cn("h-full rounded", point.value < 0 ? "bg-tomato/60" : "bg-moss/75")}
-              style={{ width: `${Math.max((Math.abs(point.value) / max) * 100, 2)}%` }}
+              className={cn("h-full rounded", point.value < 0 ? "bg-metric-rose" : "bg-brand-600")}
+              style={{ width: `${(Math.abs(point.value) / max) * 100}%` }}
             />
           </div>
-          <div className="text-right font-mono text-xs tabular-nums text-slate-700">
+          <div className="text-right font-mono text-sm tabular-nums text-slate-700">
             {formatNumber(point.value)}
           </div>
         </div>
@@ -57,8 +57,8 @@ function TypeToggle({ value, onChange }: { value: ChartType; onChange: (value: C
           type="button"
           onClick={() => onChange(type)}
           className={cn(
-            "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition",
-            value === type ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+            "inline-flex min-h-11 items-center gap-2 rounded-md px-3 py-2 text-sm transition",
+            value === type ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-800",
           )}
           aria-pressed={value === type}
         >
@@ -84,7 +84,7 @@ export function ResultChart({ rows, plan }: { rows: Row[]; plan: ChartPlan }) {
           <select
             value={metric}
             onChange={(event) => setMetric(event.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-moss/25"
+            className="min-h-11 max-w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-brand-500/25"
             aria-label="选择指标"
           >
             {plan.metrics.map((name) => (
@@ -94,7 +94,7 @@ export function ResultChart({ rows, plan }: { rows: Row[]; plan: ChartPlan }) {
             ))}
           </select>
         ) : (
-          <span className="text-xs font-medium text-slate-600">{metric}</span>
+          <span className="text-sm font-medium text-slate-600">{metric}</span>
         )}
         {canSwitch && <TypeToggle value={type} onChange={setType} />}
       </div>
@@ -103,7 +103,7 @@ export function ResultChart({ rows, plan }: { rows: Row[]; plan: ChartPlan }) {
         <>
           <BarChart points={bars.points} />
           {bars.omitted > 0 && (
-            <div className="mt-3 text-xs text-slate-400">
+            <div className="mt-3 text-sm text-slate-600">
               仅显示前 {MAX_BARS} 项，其余 {bars.omitted} 项可在表格中查看。
             </div>
           )}

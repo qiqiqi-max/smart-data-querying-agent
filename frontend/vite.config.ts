@@ -7,17 +7,18 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const backend = env.VITE_DEV_PROXY_TARGET || "http://127.0.0.1:8000";
+  const backend = env.VITE_DEV_PROXY_TARGET || "http://127.0.0.1:8001";
 
   return {
     plugins: [react()],
     server: {
-      host: "0.0.0.0",
+      host: "127.0.0.1",
       port: 5173,
       proxy: {
         "/api": {
           target: backend,
           changeOrigin: true,
+          xfwd: true,
         },
       },
     },

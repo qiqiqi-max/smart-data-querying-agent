@@ -9,7 +9,7 @@ MySQL 客户端管理器
 
 import asyncio
 
-from sqlalchemy import text
+from sqlalchemy import URL, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     async_sessionmaker,
@@ -30,12 +30,20 @@ class MySQLClientManager:
         # 保存数据库配置，后面拼接连接地址要用
         self.config = config
 
-    def _get_url(self) -> str:
+    def _get_url(self) -> URL:
         """
         拼接 MySQL 异步连接地址
         mysql+aiomysql 表示：连接 MySQL，并使用 aiomysql 作为异步驱动
         """
-        return f"mysql+aiomysql://{self.config.user}:{self.config.password}@{self.config.host}:{self.config.port}/{self.config.database}?charset=utf8mb4"
+        return URL.create(
+            "mysql+aiomysql",
+            username=self.config.user,
+            password=self.config.password,
+            host=self.config.host,
+            port=self.config.port,
+            database=self.config.database,
+            query={"charset": "utf8mb4"},
+        )
 
     def init(self):
         """初始化 Engine 和 Session 工厂"""

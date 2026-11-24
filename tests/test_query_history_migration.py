@@ -40,15 +40,17 @@ def test_migration_adds_missing_nullable_columns_once():
         )
 
     with engine.begin() as connection:
-        assert ensure_query_history_columns(connection) == ["sql"]
+        assert ensure_query_history_columns(connection) == ["sql", "response"]
     with engine.begin() as connection:
         # 再次启动时不重复加列
         assert ensure_query_history_columns(connection) == []
 
     assert "sql" in _columns(engine)
     with engine.connect() as connection:
-        row = connection.execute(text("SELECT query, sql FROM query_history")).one()
-    assert tuple(row) == ("q", None)
+        row = connection.execute(
+            text("SELECT query, sql, response FROM query_history")
+        ).one()
+    assert tuple(row) == ("q", None, None)
 
 
 def test_migration_is_noop_for_tables_created_from_the_model():
@@ -91,3 +93,22 @@ def test_mark_done_and_mark_error_store_sql():
     assert model.sql == "SELECT 1"
     asyncio.run(repository.mark_error("h1", "boom", sql="SELECT broken"))
     assert model.sql == "SELECT broken"
+
+
+def test_business_reply_is_saved_without_fake_result_or_error():
+    model = QueryHistoryMySQL(
+        id="h1", query="最近销售怎么样", status="running", row_count=0
+    )
+    repository = QueryHistoryRepository(_FakeSession(model))
+    reply = {
+        "status": "clarify",
+        "message": "请补充时间和指标。",
+        "questions": ["查看哪个时间范围？"],
+        "missing_information": [],
+    }
+    asyncio.run(repository.mark_response("h1", reply))
+    assert model.status == "clarify"
+    assert model.response == reply
+    assert model.summary == reply["message"]
+    assert model.result is None and model.sql is None and model.error is None
+    assert model.row_count == 0

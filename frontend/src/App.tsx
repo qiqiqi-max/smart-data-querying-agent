@@ -7,14 +7,14 @@ import { useEffect, useRef, useState } from "react";
 import { Composer } from "./components/Composer";
 import { EmptyState } from "./components/EmptyState";
 import { MessageBubble } from "./components/MessageBubble";
-import { ResultPanel } from "./components/ResultPanel";
 import { Sidebar } from "./components/Sidebar";
-import { deleteQueryHistory, fetchQueryHistory, streamQuery } from "./lib/agentApi";
+import { deleteQueryHistory, fetchQueryHistory, fetchQueryHistoryDetail, streamQuery } from "./lib/agentApi";
 import { cn, countResultRows, isTruncatedSummary, summarizeResult } from "./lib/format";
 import type {
   AgentEvent,
   ChatMessage,
-  QueryHistoryItem,
+  QueryHistorySummary,
+  QueryResponse,
   RunSummary,
   StepState,
 } from "./types/agent";
@@ -44,13 +44,13 @@ function loadRecentRuns(): RunSummary[] {
     const parsed = JSON.parse(raw) as RunSummary[];
     if (!Array.isArray(parsed)) return [];
 
-    return parsed.slice(0, MAX_RECENT_RUNS);
+    return parsed.slice(0, MAX_RECENT_RUNS).map(({ result, sql, ...summary }) => summary);
   } catch {
     return [];
   }
 }
 
-function historyToRun(history: QueryHistoryItem): RunSummary {
+function historyToRun(history: QueryHistorySummary): RunSummary {
   return {
     id: history.id,
     query: history.query,
@@ -60,8 +60,6 @@ function historyToRun(history: QueryHistoryItem): RunSummary {
     updatedAt: new Date(history.updated_at).getTime(),
     rows: history.row_count,
     error: history.error ?? undefined,
-    result: history.result,
-    sql: history.sql ?? undefined,
   };
 }
 
@@ -105,36 +103,58 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [activeController, setActiveController] = useState<AbortController | null>(null);
+  const [pendingParentHistoryId, setPendingParentHistoryId] = useState<string | null>(null);
   const [recentRuns, setRecentRuns] = useState<RunSummary[]>(() => loadRecentRuns());
   // 当前打开的历史记录，用于在侧边栏高亮
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [historyStatus, setHistoryStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [loadingHistoryId, setLoadingHistoryId] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<{ run: RunSummary; message: string } | null>(null);
+  const historyController = useRef<AbortController | null>(null);
+  const historyLoadId = useRef<string | null>(null);
+  const drawerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const isStreaming = Boolean(activeController);
+
+  useEffect(() => () => activeController?.abort(), [activeController]);
   const canSubmit = draft.trim().length > 0 && !isStreaming;
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(RUNS_STORAGE_KEY, JSON.stringify(recentRuns));
+      const summaries = recentRuns.map(({ result, sql, ...summary }) => summary);
+      window.localStorage.setItem(RUNS_STORAGE_KEY, JSON.stringify(summaries));
     } catch {
       // 本地历史只是增强体验，写入失败不影响主流程
     }
   }, [recentRuns]);
 
   const refreshHistory = async () => {
+    setHistoryStatus("loading");
     try {
       const histories = await fetchQueryHistory(MAX_RECENT_RUNS);
       setRecentRuns(histories.map(historyToRun));
+      setHistoryStatus("ready");
     } catch {
+      setHistoryStatus("error");
       // 后端历史不可用时保留本地记录，不打断当前问数流程
     }
   };
 
   useEffect(() => {
     void refreshHistory();
+    return () => historyController.current?.abort();
   }, []);
+
+  const cancelHistoryLoad = () => {
+    historyController.current?.abort();
+    historyController.current = null;
+    historyLoadId.current = null;
+    setLoadingHistoryId(null);
+    setHistoryError(null);
+  };
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -145,18 +165,43 @@ export default function App() {
 
   useEffect(() => {
     if (!drawerOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    drawerRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setDrawerOpen(false);
+      if (event.key === "Tab") {
+        const buttons = drawerRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)");
+        if (!buttons?.length) return;
+        const first = buttons[0];
+        const last = buttons[buttons.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
     };
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const closeOnDesktop = () => { if (desktop.matches) setDrawerOpen(false); };
+    desktop.addEventListener("change", closeOnDesktop);
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      desktop.removeEventListener("change", closeOnDesktop);
+      window.removeEventListener("keydown", onKeyDown);
+      previousFocus?.focus();
+    };
   }, [drawerOpen]);
 
   const startQuery = async (rawQuery = draft) => {
     const query = rawQuery.trim();
     if (!query || isStreaming) return;
+    cancelHistoryLoad();
 
     const startedAt = Date.now();
+    const parentHistoryId = pendingParentHistoryId ?? undefined;
+    setPendingParentHistoryId(null);
     const runId = makeId();
     const assistantId = makeId();
 
@@ -191,6 +236,13 @@ export default function App() {
     };
 
     const onEvent = (event: AgentEvent) => {
+      if (event.type === "assessment") {
+        setPendingParentHistoryId(event.status === "clarify" ? event.history_id : null);
+        setActiveRunId(event.history_id);
+        patchAssistant(() => ({ status: event.status, content: event.message, response: event, error: undefined, result: undefined, sql: undefined, finishedAt: Date.now() }));
+        patchRun({ status: event.status, summary: event.message, rows: 0, error: undefined, result: undefined, sql: undefined });
+        return;
+      }
       if (event.type === "progress") {
         patchAssistant((message) => ({ steps: upsertStep(message.steps, event) }));
         patchRun({ status: event.status === "error" ? "error" : "running", summary: `执行：${event.step}` });
@@ -198,6 +250,7 @@ export default function App() {
       }
 
       if (event.type === "result") {
+        setPendingParentHistoryId(null);
         const summary = summarizeResult(event.data, event.truncated);
         patchAssistant(() => ({
           status: "done",
@@ -211,8 +264,10 @@ export default function App() {
         return;
       }
 
+      setPendingParentHistoryId(null);
       patchAssistant(() => ({
         status: "error",
+        response: undefined,
         content: "这次查询没有成功。",
         error: event.message,
         sql: event.sql ?? undefined,
@@ -222,7 +277,7 @@ export default function App() {
     };
 
     try {
-      await streamQuery(query, { signal: controller.signal, onEvent });
+      await streamQuery(query, { signal: controller.signal, onEvent, parentHistoryId });
       await refreshHistory();
       setMessages((current) =>
         current.map((message) =>
@@ -232,12 +287,14 @@ export default function App() {
         ),
       );
     } catch (error) {
+      setPendingParentHistoryId(null);
       const isAbort = error instanceof DOMException && error.name === "AbortError";
       const message = error instanceof Error ? error.message : String(error);
 
       patchAssistant(() => ({
         status: isAbort ? "stopped" : "error",
-        content: isAbort ? "已停止本次查询。" : "无法连接问数接口。",
+        response: undefined,
+        content: isAbort ? "已停止本次查询。" : "本次查询未能完成。",
         error: isAbort ? undefined : message,
         finishedAt: Date.now(),
       }));
@@ -259,7 +316,9 @@ export default function App() {
 
   const newChat = () => {
     if (isStreaming) return;
+    cancelHistoryLoad();
     setMessages([]);
+    setPendingParentHistoryId(null);
     setDraft("");
     setActiveRunId(null);
     setDrawerOpen(false);
@@ -271,9 +330,10 @@ export default function App() {
     inputRef.current?.focus();
   };
 
-  const openHistory = (run: RunSummary) => {
-    if (isStreaming) return;
+  const showHistory = (run: RunSummary, response?: QueryResponse | null) => {
 
+    setPendingParentHistoryId(run.status === "clarify" && response?.status === "clarify" ? run.id : null);
+    setDraft("");
     setActiveRunId(run.id);
     setDrawerOpen(false);
     setMessages([
@@ -283,14 +343,45 @@ export default function App() {
         role: "assistant",
         content: run.summary || (run.status === "error" ? "这次查询没有成功。" : "历史记录已打开。"),
         createdAt: run.updatedAt,
-        status: run.status === "error" || run.status === "stopped" ? run.status : "done",
+        status: run.status === "running" ? "streaming" : run.status,
         result: run.result ?? undefined,
         truncated: isTruncatedSummary(run.summary),
         sql: run.sql,
         query: run.query,
         error: run.error,
+        response: response ?? undefined,
       },
     ]);
+  };
+
+  const openHistory = async (run: RunSummary) => {
+    if (isStreaming) return;
+    cancelHistoryLoad();
+    setPendingParentHistoryId(null);
+    setDrawerOpen(false);
+    // 当前会话的结果可直接打开；服务器历史每次打开都请求最新详情。
+    if (run.result !== undefined) {
+      showHistory(run);
+      return;
+    }
+    const controller = new AbortController();
+    historyController.current = controller;
+    historyLoadId.current = run.id;
+    setLoadingHistoryId(run.id);
+    try {
+      const history = await fetchQueryHistoryDetail(run.id, controller.signal);
+      if (controller.signal.aborted || historyController.current !== controller) return;
+      showHistory({ ...historyToRun(history), result: history.result, sql: history.sql ?? undefined }, history.response);
+    } catch (error) {
+      if (controller.signal.aborted || historyController.current !== controller) return;
+      setHistoryError({ run, message: error instanceof Error ? error.message : "历史详情加载失败，请重试。" });
+    } finally {
+      if (historyController.current === controller) {
+        historyController.current = null;
+        historyLoadId.current = null;
+        setLoadingHistoryId(null);
+      }
+    }
   };
 
   const deleteRun = async (run: RunSummary) => {
@@ -298,8 +389,11 @@ export default function App() {
     if (!window.confirm("删除这条查询记录？")) return;
     try {
       await deleteQueryHistory(run.id);
+      setPendingParentHistoryId(current => current === run.id ? null : current);
+      if (historyLoadId.current === run.id) cancelHistoryLoad();
+      setHistoryError((current) => current?.run.id === run.id ? null : current);
       setRecentRuns((current) => current.filter((item) => item.id !== run.id));
-      if (run.id === activeRunId) setActiveRunId(null);
+      setActiveRunId((current) => current === run.id ? null : current);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "删除失败，请稍后重试。");
     }
@@ -307,6 +401,8 @@ export default function App() {
 
   const sidebarProps = {
     apiBaseUrl: API_BASE_URL,
+    historyStatus,
+    loadingHistoryId,
     isStreaming,
     recentRuns,
     activeRunId,
@@ -315,78 +411,58 @@ export default function App() {
     onDeleteRun: deleteRun,
   };
 
-  // 取最后一条助手消息
-  const lastAssistantMessage = messages.findLast(
-    (msg: ChatMessage) => msg.role === "assistant",
-  );
-
   return (
     <div className="flex h-dvh overflow-hidden bg-white">
       {/* 桌面端侧边栏 */}
-      <aside className="hidden w-80 flex-col border-r border-slate-200 md:flex">
+      <aside className="hidden w-80 shrink-0 flex-col border-r border-slate-300 lg:flex">
         <Sidebar {...sidebarProps} />
       </aside>
 
       {/* 移动端侧边栏抽屉 */}
       {drawerOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/20 md:hidden"
+          className="fixed inset-0 z-40 bg-black/20 lg:hidden"
           onClick={() => setDrawerOpen(false)}
           role="presentation"
         />
       )}
-      <div
-        className={cn(
-          "fixed left-0 top-0 z-50 h-dvh w-72 transform bg-white transition-transform duration-200 md:hidden",
-          drawerOpen ? "translate-x-0" : "-translate-x-full",
-        )}
-      >
-        <Sidebar {...sidebarProps} onClose={() => setDrawerOpen(false)} />
-      </div>
+      {drawerOpen && (
+        <div ref={drawerRef} role="dialog" aria-modal="true" aria-label="查询历史"
+          className="fixed left-0 top-0 z-50 h-dvh w-80 max-w-[90vw] bg-white lg:hidden">
+          <Sidebar {...sidebarProps} onClose={() => setDrawerOpen(false)} />
+        </div>
+      )}
 
       {/* 主工作区 */}
-      <main className="flex min-w-0 flex-1 flex-col bg-slate-100/70">
+      <main inert={drawerOpen} className="flex min-w-0 flex-1 flex-col bg-slate-100/70">
         {/* 顶部专业 BI 控制台 Bar */}
-        <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
-          <div className="flex items-center gap-3">
+        <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-300 bg-white px-4 py-2 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
               disabled={isStreaming}
-              className="grid h-7 w-7 place-items-center rounded border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 md:hidden disabled:cursor-not-allowed disabled:opacity-50"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 lg:hidden disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="打开侧边栏"
             >
-              <Menu className="h-4 w-4" aria-hidden="true" />
+              <Menu className="h-5 w-5" aria-hidden="true" />
             </button>
 
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-xs font-bold tracking-tight text-slate-800">
-                BI_CONSOLE //
-              </span>
-              <span className="text-xs font-medium text-slate-600">
-                数仓智能问数工作台
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-semibold text-slate-900 sm:text-base">
+                数据分析工作台
               </span>
             </div>
 
-            <div className="hidden items-center gap-2 sm:flex">
-              <span className="h-3 w-[1px] bg-slate-200" />
-              <div className="flex items-center gap-1.5 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span>数仓引擎已连接</span>
-              </div>
-              <div className="flex items-center gap-1.5 rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-600">
-                <span>MODEL: DeepSeek-V3</span>
-              </div>
-            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 text-[11px] text-slate-500 font-mono">
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
               <span className={cn(
                 "inline-block h-2 w-2 rounded-full",
                 isStreaming ? "bg-amber-500 animate-ping" : "bg-emerald-500"
               )} />
-              <span>{isStreaming ? "EXECUTING" : "IDLE"}</span>
+              <span>{isStreaming ? "执行中" : "就绪"}</span>
             </div>
 
             {messages.length > 0 && (
@@ -396,22 +472,31 @@ export default function App() {
                   type="button"
                   onClick={newChat}
                   disabled={isStreaming}
-                  className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="重置画布"
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <Eraser className="h-3 w-3 text-slate-400" aria-hidden="true" />
-                  <span>重置画布</span>
+                  <Eraser className="h-4 w-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">新建分析</span>
                 </button>
               </>
             )}
           </div>
         </header>
 
+        {loadingHistoryId && <div role="status" className="border-b border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">正在加载历史结果…</div>}
+        {historyError && (
+          <div role="alert" className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <span>{historyError.message}</span>
+            <button type="button" className="min-h-11 shrink-0 rounded-lg border border-amber-300 px-3 py-2" onClick={() => void openHistory(historyError.run)}>重试加载</button>
+          </div>
+        )}
+
         {/* 对话与图表区域 */}
         <div className="min-h-0 flex-1 overflow-y-auto" ref={scrollRef}>
           {messages.length === 0 ? (
             <EmptyState examples={examples} onUseExample={fillExample} />
           ) : (
-            <div className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6">
+            <div className="mx-auto w-full max-w-6xl px-3 py-6 sm:px-8">
               <div className="space-y-5">
                 {messages.map((message) => (
                   <MessageBubble key={message.id} message={message} />
@@ -422,8 +507,8 @@ export default function App() {
         </div>
 
         {/* 底部控制台输入区 */}
-        <div className="relative shrink-0 border-t border-slate-200 bg-white p-3 sm:px-6">
-          <div className="mx-auto max-w-5xl">
+        <div className="relative shrink-0 border-t border-slate-300 bg-white p-3 sm:px-8 sm:py-4">
+          <div className="mx-auto max-w-6xl">
             <Composer
               value={draft}
               onChange={setDraft}
@@ -432,6 +517,7 @@ export default function App() {
               isStreaming={isStreaming}
               inputRef={inputRef}
               onStop={stopQuery}
+              isClarifying={Boolean(pendingParentHistoryId)}
             />
           </div>
         </div>

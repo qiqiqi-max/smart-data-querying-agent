@@ -1,0 +1,21 @@
+import type { QueryHistorySummary } from "./agent";
+
+export type DatabaseSettings = { host: string; port: number; user: string; database: string; password_set: boolean };
+export type ModelSettings = { model_name: string; base_url: string; api_key_set: boolean };
+export type Settings = { db_meta: DatabaseSettings; db_dw: DatabaseSettings; llm: ModelSettings };
+export type SettingsResponse = { revision: string; restart_required: boolean; effective: Settings; saved: Settings };
+export type DatabaseInput = Omit<DatabaseSettings, "password_set"> & { password?: string };
+export type ModelInput = Omit<ModelSettings, "api_key_set"> & { api_key?: string };
+export type SettingsInput = { revision: string; db_meta: DatabaseInput; db_dw: DatabaseInput; llm: ModelInput };
+export type ConnectionResult = { ok: boolean; message: string; latency_ms: number };
+export type SchemaColumn = { name: string; type: string; nullable: boolean; primary_key: boolean; comment: string };
+export type SchemaTable = { name: string; columns: SchemaColumn[] };
+export type MetadataColumn = { name: string; role: "primary_key" | "foreign_key" | "measure" | "dimension"; description: string; alias: string[]; sync: boolean };
+export type MetadataTable = { name: string; role: "fact" | "dim"; description: string; columns: MetadataColumn[] };
+export type MetadataMetric = { name: string; description: string; relevant_columns: string[]; alias: string[] };
+export type Metadata = { revision: string; built_revision: string | null; dirty: boolean; tables: MetadataTable[]; metrics: MetadataMetric[] };
+export type MetadataInput = Pick<Metadata, "revision" | "tables" | "metrics">;
+export type Build = { id: string; status: "queued" | "running" | "done" | "error" | "interrupted"; stage: string; completed_stages: number; total_stages: number; created_at: string; updated_at: string; error: string | null; revision: string };
+export type Overview = { mode: "local"; demo_mode: boolean; maintenance: { building: boolean; blocked: boolean; active_queries: number }; counts: { tables: number; columns: number; metrics: number; queries: number }; query_status: Record<string, number>; services: { name: string; status: "ready" | "error" | "unconfigured"; message: string }[]; knowledge: { revision: string; built_revision: string | null; dirty: boolean }; restart_required: boolean };
+export type QueryPage = { items: QueryHistorySummary[]; total: number; page: number; page_size: number };
+export type AuditEntry = { id: string; at: string; action: string; status: string; message: string };

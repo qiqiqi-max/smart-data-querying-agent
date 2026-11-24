@@ -12,6 +12,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from omegaconf import OmegaConf
 
+from app.conf.admin_overrides import load_admin_overrides
+
 
 @dataclass
 class File:
@@ -120,14 +122,20 @@ def resolve_project_path(value: str) -> Path:
 # 先读取本地 .env，让 YAML 中的 ${oc.env:...} 可以解析到敏感配置
 load_dotenv(project_root / ".env")
 
-# 读取 YAML 配置内容
-context = OmegaConf.load(config_file)
 
-# 根据 AppConfig 生成结构化配置 schema
-schema = OmegaConf.structured(AppConfig)
+def load_app_config(path: Path) -> AppConfig:
+    context = OmegaConf.load(path)
+    schema = OmegaConf.structured(AppConfig)
+    # Only the trusted YAML supports interpolation; UI input is always literal text.
+    result: AppConfig = OmegaConf.to_object(OmegaConf.merge(schema, context))
+    overrides = load_admin_overrides(resolve_project_path(result.local_data_dir))
+    for section, values in overrides.items():
+        for name, value in values.items():
+            setattr(getattr(result, section), name, value)
+    return result
 
-# 把配置结构和配置值合并，再转换成可以直接按属性访问的对象
-app_config: AppConfig = OmegaConf.to_object(OmegaConf.merge(schema, context))
+
+app_config: AppConfig = load_app_config(config_file)
 
 if __name__ == "__main__":
     # 简单测试：验证配置是否能正常读取

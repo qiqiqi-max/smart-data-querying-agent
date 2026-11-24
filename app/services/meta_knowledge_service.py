@@ -8,15 +8,18 @@
 以及指标入库和指标向量索引构建逻辑
 """
 
+import json
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 
+import yaml
 from omegaconf import OmegaConf
 from sqlalchemy import delete
 
 from app.clients.embedding_client import EmbeddingClient
-from app.conf.meta_config import MetaConfig
+from app.conf.meta_config import ColumnConfig, MetaConfig, MetricConfig, TableConfig
 from app.core.log import logger
 from app.entities.column_info import ColumnInfo
 from app.entities.column_metric import ColumnMetric
@@ -62,7 +65,7 @@ class MetaKnowledgeService:
         self.metric_qdrant_repository: MetricQdrantRepository = metric_qdrant_repository
 
     async def _save_tables_to_meta_db(
-        self, meta_config: MetaConfig
+        self, meta_config: MetaConfig, *, full_replace: bool = False
     ) -> list[ColumnInfo]:
         """把配置里的表字段信息补齐后写入 Meta MySQL"""
         table_infos: list[TableInfo] = []
@@ -92,7 +95,8 @@ class MetaKnowledgeService:
                     name=column.name,
                     type=column_types[column.name],
                     role=column.role,
-                    examples=column_values,
+                    # MySQL DECIMAL/DATE/DATETIME 必须先转成 JSON 可存储值。
+                    examples=json.loads(json.dumps(column_values, default=str)),
                     description=column.description,
                     alias=column.alias,
                     table_id=table.name,
@@ -102,8 +106,17 @@ class MetaKnowledgeService:
         table_ids = [table.name for table in meta_config.tables]
         column_ids = [column_info.id for column_info in column_infos]
         async with self.meta_mysql_repository.session.begin():
+            if full_replace:
+                # 后台全量重建必须移除配置中已删除的表、字段、指标及关联。
+                for model in (
+                    ColumnMetricMySQL,
+                    ColumnInfoMySQL,
+                    MetricInfoMySQL,
+                    TableInfoMySQL,
+                ):
+                    await self.meta_mysql_repository.session.execute(delete(model))
             # 构建脚本允许重复执行，先删除本次配置涉及的旧元数据，避免主键冲突。
-            if column_ids:
+            elif column_ids:
                 await self.meta_mysql_repository.session.execute(
                     delete(ColumnMetricMySQL).where(
                         ColumnMetricMySQL.column_id.in_(column_ids)
@@ -112,7 +125,7 @@ class MetaKnowledgeService:
                 await self.meta_mysql_repository.session.execute(
                     delete(ColumnInfoMySQL).where(ColumnInfoMySQL.id.in_(column_ids))
                 )
-            if table_ids:
+            if table_ids and not full_replace:
                 await self.meta_mysql_repository.session.execute(
                     delete(TableInfoMySQL).where(TableInfoMySQL.id.in_(table_ids))
                 )
@@ -180,10 +193,17 @@ class MetaKnowledgeService:
         await self.column_qdrant_repository.upsert(ids, embeddings, payloads)
 
     async def _save_value_info_to_es(
-        self, meta_config: MetaConfig, column_infos: list[ColumnInfo]
+        self,
+        meta_config: MetaConfig,
+        column_infos: list[ColumnInfo],
+        *,
+        full_replace: bool = False,
     ):
         """把允许同步的字段真实取值写入 Elasticsearch 全文索引"""
-        await self.value_es_repository.ensure_index()
+        if full_replace:
+            await self.value_es_repository.reset_index()
+        else:
+            await self.value_es_repository.ensure_index()
 
         # 不是所有字段都要同步真实值，是否同步由配置里的 sync 显式控制
         column2sync: dict[str, bool] = {}
@@ -204,7 +224,7 @@ class MetaKnowledgeService:
                 current_values_infos = [
                     ValueInfo(
                         id=f"{column_info.id}.{current_column_value}",
-                        value=current_column_value,
+                        value=str(current_column_value),
                         column_id=column_info.id,
                     )
                     for current_column_value in current_column_values
@@ -311,8 +331,73 @@ class MetaKnowledgeService:
 
         await self.metric_qdrant_repository.upsert(ids, embeddings, payloads)
 
-    async def build(self, config_path: Path):
+    async def build(
+        self,
+        config_path: Path,
+        *,
+        full_replace: bool = False,
+        progress: Callable[[str, int, int], None] | None = None,
+    ):
         """读取配置并依次构建 Meta MySQL Qdrant 和 ES 中的元数据索引"""
+        if full_replace:
+            # 每张真实表和全部字段均在任何写操作之前校验。
+            from app.api.schemas.admin_knowledge_schema import MetadataUpdate
+
+            # 后台输入是文本，不执行 OmegaConf 的环境变量等插值表达式。
+            context = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+            validated = MetadataUpdate.model_validate(
+                {
+                    "revision": "build",
+                    "tables": context.get("tables") or [],
+                    "metrics": context.get("metrics") or [],
+                }
+            )
+            meta_config = MetaConfig(
+                tables=[
+                    TableConfig(
+                        **table.model_dump(exclude={"columns"}),
+                        columns=[
+                            ColumnConfig(**column.model_dump())
+                            for column in table.columns
+                        ],
+                    )
+                    for table in validated.tables
+                ],
+                metrics=[
+                    MetricConfig(**metric.model_dump()) for metric in validated.metrics
+                ],
+            )
+            for table in meta_config.tables:
+                column_types = await self.dw_mysql_repository.get_column_types(
+                    table.name
+                )
+                for column in table.columns:
+                    if column.name not in column_types:
+                        raise ValueError(
+                            f"数仓中不存在字段：{table.name}.{column.name}"
+                        )
+
+            def completed(stage: str, count: int):
+                if progress is not None:
+                    progress(stage, count, 6)
+
+            completed("真实表结构校验完成", 1)
+            column_infos = await self._save_tables_to_meta_db(
+                meta_config, full_replace=True
+            )
+            completed("表与字段入库完成", 2)
+            await self._save_column_info_to_qdrant(column_infos)
+            completed("字段向量索引完成", 3)
+            await self._save_value_info_to_es(
+                meta_config, column_infos, full_replace=True
+            )
+            completed("字段取值索引完成", 4)
+            metric_infos = await self._save_metrics_to_meta_db(meta_config)
+            completed("指标与关联入库完成", 5)
+            await self._save_metrics_to_qdrant(metric_infos)
+            completed("指标向量索引完成", 6)
+            return
+
         context = OmegaConf.load(config_path)
         schema = OmegaConf.structured(MetaConfig)
         meta_config: MetaConfig = OmegaConf.to_object(OmegaConf.merge(schema, context))

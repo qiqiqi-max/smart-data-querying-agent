@@ -41,21 +41,18 @@ type ResultPanelProps = {
 
 function KpiMetricsGrid({ items }: { items: Array<{ label: string; value: number }> }) {
   return (
-    <div className="grid grid-cols-2 gap-2.5 p-3 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
       {items.map((item, idx) => (
         <div
           key={item.label}
           className="rounded border border-slate-200 bg-slate-50/60 p-3 shadow-subtle"
         >
-          <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
+          <div className="flex items-center justify-between text-sm font-sans text-slate-600">
             <span>{item.label}</span>
-            <span className="font-semibold text-slate-400">#0{idx + 1}</span>
+            <span className="font-semibold text-slate-600">#0{idx + 1}</span>
           </div>
-          <div className="mt-1 font-mono text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
+          <div className="mt-2 break-words text-3xl font-bold tracking-tight text-slate-900 tabular-nums">
             {formatNumber(item.value)}
-          </div>
-          <div className="mt-1 text-[10px] text-slate-400 font-mono">
-            AGG_TYPE: SUM / AVG
           </div>
         </div>
       ))}
@@ -96,7 +93,7 @@ export function ResultPanel({ data, truncated = false, sql, query = "" }: Result
       {/* 报表工具条 (Toolbar) */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/80 px-3 py-1.5">
         {/* Tab 选项卡 */}
-        <div className="flex items-center space-x-1" role="tablist">
+        <div className="flex max-w-full flex-wrap items-center gap-1" role="tablist" aria-label="结果视图">
           {tabs.map((item) => {
             const isSelected = tab === item.id;
             const Icon = item.icon;
@@ -108,13 +105,13 @@ export function ResultPanel({ data, truncated = false, sql, query = "" }: Result
                 aria-selected={isSelected}
                 onClick={() => setTab(item.id)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold transition",
+                  "flex min-h-11 items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-semibold transition sm:px-3",
                   isSelected
                     ? "bg-white text-brand-700 shadow-subtle border border-slate-200/80"
                     : "text-slate-600 hover:text-slate-900",
                 )}
               >
-                <Icon className={cn("h-3.5 w-3.5", isSelected ? "text-brand-600" : "text-slate-400")} />
+                <Icon className={cn("hidden h-4 w-4 sm:block", isSelected ? "text-brand-600" : "text-slate-600")} />
                 <span>{item.label}</span>
               </button>
             );
@@ -122,9 +119,9 @@ export function ResultPanel({ data, truncated = false, sql, query = "" }: Result
         </div>
 
         {/* 右侧动作工具 */}
-        <div className="flex items-center gap-2 font-mono text-[11px]">
-          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500 border border-slate-200">
-            TOTAL: {rows.length} ROWS
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600 border border-slate-200">
+            {rows.length} 行结果
           </span>
 
           <div className="flex items-center rounded border border-slate-200 bg-white shadow-subtle">
@@ -132,11 +129,11 @@ export function ResultPanel({ data, truncated = false, sql, query = "" }: Result
               type="button"
               onClick={onCopy}
               disabled={tab === "sql" ? !sql : rows.length === 0}
-              className="inline-flex items-center gap-1 px-2 py-0.5 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40"
+              className="inline-flex min-h-11 items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
               title="复制数据"
             >
               {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
-              <span>{copied ? "COPIED" : tab === "sql" ? "COPY_SQL" : "COPY_TSV"}</span>
+              <span>{copied ? "已复制" : tab === "sql" ? "复制 SQL" : "复制数据"}</span>
             </button>
 
             <span className="h-3 w-[1px] bg-slate-200" />
@@ -145,11 +142,11 @@ export function ResultPanel({ data, truncated = false, sql, query = "" }: Result
               type="button"
               onClick={onExport}
               disabled={rows.length === 0}
-              className="inline-flex items-center gap-1 px-2 py-0.5 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40"
+              className="inline-flex min-h-11 items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
               title="导出 CSV"
             >
               <Download className="h-3 w-3" />
-              <span>EXPORT_CSV</span>
+              <span>导出 CSV</span>
             </button>
           </div>
         </div>
@@ -157,9 +154,9 @@ export function ResultPanel({ data, truncated = false, sql, query = "" }: Result
 
       {/* 截断警告提示 */}
       {truncated && tab !== "sql" && (
-        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 font-mono text-xs text-amber-800">
+        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 font-sans text-sm text-amber-800">
           <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-          <span>[WARN] RESULT TRUNCATED: 当前结果已被安全截断至 {rows.length} 行，建议追加 WHERE 条件下钻。</span>
+          <span>当前仅显示前 {rows.length} 行，请缩小查询范围以查看完整结果。</span>
         </div>
       )}
 
@@ -169,8 +166,8 @@ export function ResultPanel({ data, truncated = false, sql, query = "" }: Result
         {tab === "overview" && !kpis && plan && <ResultChart rows={rows} plan={plan} />}
         {tab === "table" &&
           (rows.length === 0 ? (
-            <div className="p-8 text-center font-mono text-xs text-slate-400">
-              [EMPTY_SET] 查询执行成功，但返回数据集为空。
+            <div className="p-8 text-center font-sans text-sm text-slate-600">
+              查询已完成，没有符合条件的数据。
             </div>
           ) : (
             <ResultTable rows={rows} columns={columns} />

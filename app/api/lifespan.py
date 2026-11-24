@@ -27,12 +27,14 @@ from app.repositories.mysql.meta.query_history_repository import (
 )
 from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
 from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
+from app.services.admin_runtime import knowledge_service
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """管理应用启动和关闭两个阶段的外部资源"""
 
+    knowledge_service.recover()
     # 启动阶段：先建立各类外部服务客户端，后续依赖函数会从 manager 中取已初始化对象
     qdrant_client_manager.init()
     if qdrant_client_manager.client is None:
@@ -135,10 +137,12 @@ async def lifespan(app: FastAPI):
             raise RuntimeError("完整模式依赖检查失败：" + "、".join(missing))
 
     # yield 之前是启动逻辑，yield 之后是关闭逻辑；中间阶段由 FastAPI 正常处理请求
-    yield
-
-    # 关闭阶段：按应用级资源统一释放连接，避免进程退出前留下未关闭的网络连接
-    await qdrant_client_manager.close()
-    await es_client_manager.close()
-    await meta_mysql_client_manager.close()
-    await dw_mysql_client_manager.close()
+    try:
+        yield
+    finally:
+        await knowledge_service.close()
+        # 即使服务取消也释放应用资源。
+        await qdrant_client_manager.close()
+        await es_client_manager.close()
+        await meta_mysql_client_manager.close()
+        await dw_mysql_client_manager.close()

@@ -64,6 +64,9 @@ class DataAgentState(TypedDict):
     """一次问数链路中的核心状态"""
 
     query: str  # 用户输入的查询
+    assessment: dict  # 已核验的查询意图、必要字段及指标依据
+    query_catalog: dict  # 与真实数据源交叉核对后的完整元数据
+    clarification_context: dict  # 后端历史中读取的原问题和用户补充
     keywords: list[str]  # 抽取的关键词
     retrieved_column_infos: list[ColumnInfo]  # 检索到的字段信息
     retrieved_metric_infos: list[MetricInfo]  # 检索到的指标信息

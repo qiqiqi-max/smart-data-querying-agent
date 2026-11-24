@@ -28,7 +28,9 @@ async def add_extra_context(state: DataAgentState, runtime: Runtime[DataAgentCon
         date_str = today.strftime("%Y-%m-%d")
         weekday = today.strftime("%A")
         quarter = f"Q{(today.month - 1) // 3 + 1}"
-        date_info = DateInfoState(date=date_str, weekday=weekday, quarter=quarter)
+        date_info = state.get("date_info") or DateInfoState(
+            date=date_str, weekday=weekday, quarter=quarter
+        )
 
         # 数据库方言和版本会影响函数名 日期运算 limit 语法等 SQL 细节
         db = await dw_mysql_repository.get_db_info()

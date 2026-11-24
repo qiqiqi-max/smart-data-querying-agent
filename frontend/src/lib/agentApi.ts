@@ -2,7 +2,7 @@
  * 智能体接口客户端
  * 封装后端 /api/query SSE 流式接口请求与事件解析逻辑
  */
-import type { AgentEvent, QueryHistoryItem } from "../types/agent";
+import type { AgentEvent, QueryHistoryItem, QueryHistorySummary } from "../types/agent";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -10,6 +10,7 @@ type QueryOptions = {
   signal?: AbortSignal;
   onEvent: (event: AgentEvent) => void;
   timeoutMs?: number;
+  parentHistoryId?: string;
 };
 
 export async function streamQuery(query: string, options: QueryOptions) {
@@ -27,12 +28,13 @@ export async function streamQuery(query: string, options: QueryOptions) {
       "Content-Type": "application/json",
       Accept: "text/event-stream",
     },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, ...(options.parentHistoryId ? { parent_history_id: options.parentHistoryId } : {}) }),
     signal,
   });
 
   if (!response.ok) {
-    throw new Error(`接口请求失败：HTTP ${response.status}`);
+    const error = await response.json().catch(() => null);
+    throw new Error(typeof error?.detail === "string" ? error.detail : `接口请求失败：HTTP ${response.status}`);
   }
 
   if (!response.body) {
@@ -70,18 +72,33 @@ export async function streamQuery(query: string, options: QueryOptions) {
 }
 
 
-export async function fetchQueryHistory(limit = 20): Promise<QueryHistoryItem[]> {
+export async function fetchQueryHistory(limit = 20): Promise<QueryHistorySummary[]> {
   const response = await fetch(`${API_BASE_URL}/api/query/history?limit=${limit}`, {
     headers: {
       Accept: "application/json",
     },
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {
     throw new Error(`历史记录请求失败：HTTP ${response.status}`);
   }
 
-  return (await response.json()) as QueryHistoryItem[];
+  return (await response.json()) as QueryHistorySummary[];
+}
+
+export async function fetchQueryHistoryDetail(historyId: string, signal?: AbortSignal): Promise<QueryHistoryItem> {
+  const timeout = AbortSignal.timeout(10_000);
+  const response = await fetch(`${API_BASE_URL}/api/query/history/${encodeURIComponent(historyId)}`, {
+    headers: { Accept: "application/json" },
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
+  if (!response.ok) {
+    throw new Error(response.status === 404
+      ? "这条历史记录已不存在，请刷新历史或重新查询。"
+      : `历史详情加载失败：HTTP ${response.status}`);
+  }
+  return (await response.json()) as QueryHistoryItem;
 }
 
 export async function deleteQueryHistory(historyId: string): Promise<void> {

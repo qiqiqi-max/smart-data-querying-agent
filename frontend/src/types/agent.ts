@@ -26,7 +26,20 @@ export type ErrorEvent = {
   sql?: string | null;
 };
 
-export type AgentEvent = ProgressEvent | ResultEvent | ErrorEvent;
+export type QueryResponse = {
+  status: "clarify" | "unsupported";
+  reason: "ambiguous_query" | "missing_data" | "undefined_metric" | "inconsistent_metric";
+  message: string;
+  questions: string[];
+  missing_information: string[];
+};
+
+export type AssessmentEvent = QueryResponse & {
+  type: "assessment";
+  history_id: string;
+};
+
+export type AgentEvent = ProgressEvent | ResultEvent | ErrorEvent | AssessmentEvent;
 
 export type StepState = {
   step: string;
@@ -43,7 +56,8 @@ export type ChatMessage = {
   createdAt: number;
   // 回答结束的时间，用来计算执行耗时；历史记录打开时没有该值
   finishedAt?: number;
-  status?: "streaming" | "done" | "error" | "stopped";
+  status?: "streaming" | "done" | "error" | "stopped" | "clarify" | "unsupported";
+  response?: QueryResponse;
   steps?: StepState[];
   result?: unknown;
   truncated?: boolean;
@@ -53,7 +67,7 @@ export type ChatMessage = {
   error?: string;
 };
 
-export type RunStatus = "running" | "done" | "error" | "stopped";
+export type RunStatus = "running" | "done" | "error" | "stopped" | "clarify" | "unsupported";
 
 export type RunSummary = {
   id: string;
@@ -69,16 +83,20 @@ export type RunSummary = {
   sql?: string;
 };
 
-export type QueryHistoryItem = {
+export type QueryHistorySummary = {
   id: string;
   query: string;
   status: RunStatus;
   summary: string | null;
-  result: unknown;
   row_count: number;
   error: string | null;
-  // 旧记录没有保存 SQL，值为 null
-  sql?: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type QueryHistoryItem = QueryHistorySummary & {
+  result: unknown;
+  // 旧记录没有保存 SQL，值为 null
+  sql: string | null;
+  response?: QueryResponse | null;
 };

@@ -13,7 +13,7 @@ import {
 export const SERIES_COLORS = ["#0f766e", "#0284c7", "#b45309", "#7c3aed", "#be123c", "#475569"];
 
 const HEIGHT = 240;
-const PAD = { top: 12, right: 16, bottom: 28, left: 56 };
+const PAD = { top: 12, right: 32, bottom: 32, left: 64 };
 
 // 把坐标轴刻度取成 1、2、5 的整倍数，读数更直观
 function niceTicks(min: number, max: number, count = 4) {
@@ -58,7 +58,7 @@ export function LineChart({ series }: { series: ChartSeries[] }) {
     PAD.left + (labels.length === 1 ? innerWidth / 2 : (index * innerWidth) / (labels.length - 1));
   const y = (value: number) => PAD.top + innerHeight * (1 - (value - yMin) / (yMax - yMin || 1));
   // 横轴标签太密时隔几个显示一个，每个标签大约占 72px
-  const labelStep = Math.max(1, Math.ceil(labels.length / Math.max(Math.floor(innerWidth / 72), 1)));
+  const labelStep = Math.max(1, Math.ceil(labels.length / Math.max(Math.floor(innerWidth / 96), 1)));
   const color = (index: number) => SERIES_COLORS[index % SERIES_COLORS.length];
 
   const paths = lookup.map((map) => {
@@ -90,14 +90,14 @@ export function LineChart({ series }: { series: ChartSeries[] }) {
           {ticks.map((tick) => (
             <g key={tick}>
               <line x1={PAD.left} x2={width - PAD.right} y1={y(tick)} y2={y(tick)} stroke="#e2e8f0" />
-              <text x={PAD.left - 8} y={y(tick)} dy="0.32em" textAnchor="end" className="fill-slate-400 text-[11px]">
+              <text x={PAD.left - 8} y={y(tick)} dy="0.32em" textAnchor="end" className="fill-slate-600 text-sm">
                 {formatCompact(tick)}
               </text>
             </g>
           ))}
           {labels.map((label, index) =>
             index % labelStep === 0 ? (
-              <text key={label} x={x(index)} y={HEIGHT - 8} textAnchor="middle" className="fill-slate-400 text-[11px]">
+              <text key={label} x={x(index)} y={HEIGHT - 8} textAnchor="middle" className="fill-slate-600 text-sm">
                 {label}
               </text>
             ) : null,
@@ -124,7 +124,7 @@ export function LineChart({ series }: { series: ChartSeries[] }) {
 
       {hover !== null && (
         <div
-          className="pointer-events-none absolute top-1 z-10 min-w-[128px] -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-panel"
+          className="pointer-events-none absolute top-1 z-10 min-w-[128px] -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-panel"
           style={{ left: Math.min(Math.max(x(hover), 72), width - 72) }}
         >
           <div className="font-medium text-slate-900">{labels[hover]}</div>
@@ -146,7 +146,7 @@ export function LineChart({ series }: { series: ChartSeries[] }) {
       )}
 
       {series.length > 1 && (
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
           {series.map((item, index) => (
             <span key={item.name} className="inline-flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full" style={{ background: color(index) }} />

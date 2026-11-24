@@ -10,16 +10,23 @@ from typing import Any
 
 
 @dataclass
-class QueryHistory:
-    """一次问数运行记录"""
+class QueryHistorySummary:
+    """历史列表摘要，不包含完整结果和 SQL。"""
 
     id: str
     query: str
     status: str
     summary: str | None
-    result: Any
     row_count: int
     error: str | None
     created_at: datetime
     updated_at: datetime
+
+
+@dataclass
+class QueryHistory(QueryHistorySummary):
+    """单次问数详情。"""
+
+    result: Any
     sql: str | None = None
+    response: dict | None = None

@@ -5,6 +5,8 @@
 字段校验和 OpenAPI 文档生成交给 Pydantic 与 FastAPI 完成。
 """
 
+from uuid import UUID
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -13,6 +15,12 @@ class QuerySchema(BaseModel):
 
     # 前端请求体中的 query 字段，例如 {"query": "统计华北地区销售额"}
     query: str = Field(min_length=1, max_length=500)
+    parent_history_id: str | None = None
+
+    @field_validator("parent_history_id")
+    @classmethod
+    def validate_parent(cls, value: str | None) -> str | None:
+        return str(UUID(value)) if value is not None else None
 
     @field_validator("query")
     @classmethod

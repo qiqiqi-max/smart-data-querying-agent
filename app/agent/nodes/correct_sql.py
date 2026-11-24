@@ -26,6 +26,9 @@ async def correct_sql(state: DataAgentState, runtime: Runtime[DataAgentContext])
     writer({"type": "progress", "step": step, "status": "running"})
 
     try:
+        assessment = state.get("assessment")
+        if not assessment or assessment["status"] != "ready":
+            raise ValueError("查询尚未通过数据与口径检查，不能修正 SQL")
         # 校正 SQL 仍然需要完整上下文，避免模型只根据报错修语法却改丢业务语义
         table_infos = state["table_infos"]
         metric_infos = state["metric_infos"]
@@ -47,6 +50,7 @@ async def correct_sql(state: DataAgentState, runtime: Runtime[DataAgentContext])
                 "query",
                 "sql",
                 "error",
+                "confirmed_plan",
             ],
         )
         # 修正后的输出仍然是一条纯 SQL 文本，用来覆盖 state["sql"]
@@ -67,6 +71,9 @@ async def correct_sql(state: DataAgentState, runtime: Runtime[DataAgentContext])
                 "query": query,
                 "sql": sql,
                 "error": error,
+                "confirmed_plan": yaml.dump(
+                    assessment, allow_unicode=True, sort_keys=False
+                ),
             }
         )
         result = clean_llm_sql(result)

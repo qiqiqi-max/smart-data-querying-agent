@@ -14,12 +14,17 @@ from starlette.responses import StreamingResponse
 from starlette.types import Receive, Scope, Send
 
 from app.api.dependencies import get_query_history_repository, get_query_service
-from app.api.schemas.query_history_schema import QueryHistoryItem
+from app.api.schemas.query_history_schema import (
+    QueryHistoryItem,
+    QueryHistorySummaryItem,
+)
 from app.api.schemas.query_schema import QuerySchema
+from app.core.maintenance import maintenance
 from app.repositories.mysql.meta.query_history_repository import (
     QueryHistoryRepository,
     QueryHistoryRunningError,
 )
+from app.services.query_clarification import ClarificationError
 from app.services.query_service import QueryService
 
 # 当前模块只维护查询相关接口，避免后续所有 API 都挤在 main.py 中
@@ -32,16 +37,24 @@ STREAM_CLOSE_TIMEOUT_SECONDS = 10
 class ClosingStreamingResponse(StreamingResponse):
     """响应结束后显式关闭生成器，客户端断开时也能执行生成器的收尾逻辑"""
 
+    def __init__(self, *args, on_close=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.on_close = on_close
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         try:
             await super().__call__(scope, receive, send)
         finally:
             # Starlette 检测到断开时只取消发送任务，不关闭 body_iterator，
             # 生成器会停在 yield 处，直到被垃圾回收才执行收尾
-            aclose = getattr(self.body_iterator, "aclose", None)
-            if aclose is not None:
-                with anyio.move_on_after(STREAM_CLOSE_TIMEOUT_SECONDS, shield=True):
-                    await aclose()
+            try:
+                aclose = getattr(self.body_iterator, "aclose", None)
+                if aclose is not None:
+                    with anyio.move_on_after(STREAM_CLOSE_TIMEOUT_SECONDS, shield=True):
+                        await aclose()
+            finally:
+                if self.on_close is not None:
+                    self.on_close()
 
 
 @query_router.post("/api/query")
@@ -53,14 +66,40 @@ async def query_handler(
 ):
     """接收用户自然语言问题，并流式返回 LangGraph 工作流输出"""
 
+    clarification_context = None
+    if query.parent_history_id:
+        try:
+            clarification_context = await query_service.prepare_clarification(
+                query.parent_history_id, query.query
+            )
+        except ClarificationError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from exc
+
+    release = maintenance.reserve_query()
+
+    async def guarded_query():
+        from contextlib import aclosing
+
+        query_stream = (
+            query_service.query(
+                query.query, clarification_context=clarification_context
+            )
+            if clarification_context
+            else query_service.query(query.query)
+        )
+        async with aclosing(query_stream) as stream:
+            async for chunk in stream:
+                yield chunk
+
     return ClosingStreamingResponse(
         # query.query 是用户问题字符串；QueryService.query 返回异步生成器供响应逐段消费
-        query_service.query(query.query),
+        guarded_query(),
         media_type="text/event-stream",
+        on_close=release,
     )
 
 
-@query_router.get("/api/query/history", response_model=list[QueryHistoryItem])
+@query_router.get("/api/query/history", response_model=list[QueryHistorySummaryItem])
 async def query_history_handler(
     query_history_repository: Annotated[
         QueryHistoryRepository, Depends(get_query_history_repository)
@@ -71,20 +110,23 @@ async def query_history_handler(
 
     histories = await query_history_repository.list_recent(limit)
     return [
-        QueryHistoryItem(
-            id=history.id,
-            query=history.query,
-            status=history.status,
-            summary=history.summary,
-            result=history.result,
-            row_count=history.row_count,
-            error=history.error,
-            sql=history.sql,
-            created_at=history.created_at,
-            updated_at=history.updated_at,
-        )
+        QueryHistorySummaryItem.model_validate(history, from_attributes=True)
         for history in histories
     ]
+
+
+@query_router.get("/api/query/history/{history_id}", response_model=QueryHistoryItem)
+async def query_history_detail_handler(
+    history_id: str,
+    query_history_repository: Annotated[
+        QueryHistoryRepository, Depends(get_query_history_repository)
+    ],
+):
+    """打开历史记录时读取完整结果。"""
+    history = await query_history_repository.get_by_id(history_id)
+    if history is None:
+        raise HTTPException(status_code=404, detail="查询记录不存在")
+    return QueryHistoryItem.model_validate(history, from_attributes=True)
 
 
 @query_router.delete("/api/query/history/{history_id}", status_code=204)

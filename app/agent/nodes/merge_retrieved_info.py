@@ -36,6 +36,34 @@ async def merge_retrieved_info(
         retrieved_metric_infos: list[MetricInfo] = state["retrieved_metric_infos"]
         retrieved_value_infos: list[ValueInfo] = state["retrieved_value_infos"]
 
+        assessment = state.get("assessment")
+        catalog_columns = {}
+        if assessment:
+            for table in state["query_catalog"]["tables"]:
+                for column in table["columns"]:
+                    catalog_columns[column["id"]] = (table, column)
+            # Discard stale index entries; only the verified catalog supplies metadata.
+            retrieved_column_infos = [
+                column
+                for column in retrieved_column_infos
+                if column.id in catalog_columns
+            ]
+            retrieved_value_infos = [
+                value
+                for value in retrieved_value_infos
+                if value.column_id in catalog_columns
+            ]
+            retrieved_metric_infos = [
+                MetricInfo(
+                    id=usage["metric_id"] or f"explicit.{usage['name']}",
+                    name=usage["name"],
+                    description=usage["definition"],
+                    relevant_columns=usage["required_columns"],
+                    alias=[],
+                )
+                for usage in assessment["metrics"]
+            ]
+
         meta_mysql_repository = runtime.context["meta_mysql_repository"]
 
         # 本节点的主线是：
@@ -49,6 +77,20 @@ async def merge_retrieved_info(
             retrieved_column_info.id: retrieved_column_info
             for retrieved_column_info in retrieved_column_infos
         }
+
+        if assessment:
+            for column_id in assessment["required_columns"]:
+                table, column = catalog_columns[column_id]
+                retrieved_column_infos_map[column_id] = ColumnInfo(
+                    id=column["id"],
+                    name=column["name"],
+                    type=column["type"],
+                    role=column["role"],
+                    description=column["description"],
+                    examples=list(column.get("examples", [])),
+                    alias=list(column.get("alias", [])),
+                    table_id=table["name"],
+                )
 
         # 2. 补齐指标依赖字段
         # 指标告诉模型“怎么算”，但生成 SQL 还需要知道指标依赖哪些真实字段。
@@ -86,6 +128,10 @@ async def merge_retrieved_info(
             if table_id not in table_to_columns_map:
                 table_to_columns_map[table_id] = []
             table_to_columns_map[table_id].append(column_info)
+
+        if assessment:
+            for table_name in assessment["required_tables"]:
+                table_to_columns_map.setdefault(table_name, [])
 
         # 5. 补齐主外键字段
         # 主外键通常不会出现在用户问题里，单靠向量召回容易漏掉；

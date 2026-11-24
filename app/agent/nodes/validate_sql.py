@@ -8,7 +8,9 @@ SQL 校验节点
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
+from app.agent.query_assessment import check_sql_context
 from app.agent.state import DataAgentState
+from app.conf.app_config import app_config
 from app.core.log import logger
 from app.repositories.mysql.dw.dw_mysql_repository import DWMySQLRepository
 
@@ -28,6 +30,13 @@ async def validate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
         dw_mysql_repository: DWMySQLRepository = runtime.context["dw_mysql_repository"]
 
         try:
+            if assessment := state.get("assessment"):
+                check_sql_context(
+                    sql,
+                    state["table_infos"],
+                    required_columns=assessment["required_columns"],
+                    database=app_config.db_dw.database,
+                )
             # validate 内部使用 explain <sql>，只关心数据库能否成功解析这条 SQL
             await dw_mysql_repository.validate(sql)
             writer({"type": "progress", "step": step, "status": "success"})

@@ -21,7 +21,9 @@ class QueryHistoryMySQL(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, comment="记录编号")
     query: Mapped[str] = mapped_column(Text, nullable=False, comment="用户问题")
     status: Mapped[str] = mapped_column(
-        String(16), nullable=False, comment="运行状态(running/done/error/stopped)"
+        String(16),
+        nullable=False,
+        comment="运行状态(running/done/error/stopped/clarify/unsupported)",
     )
     summary: Mapped[str | None] = mapped_column(Text, comment="结果摘要")
     result: Mapped[dict | list | None] = mapped_column(JSON, comment="结构化查询结果")
@@ -31,6 +33,9 @@ class QueryHistoryMySQL(Base):
     error: Mapped[str | None] = mapped_column(Text, comment="错误信息")
     # 新增列：已有表由 lifespan 启动时的 ensure_query_history_columns 自动补齐
     sql: Mapped[str | None] = mapped_column(Text, comment="最终执行或最后校验的 SQL")
+    response: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True, comment="信息缺失说明、追问及可信补充上下文"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False, comment="创建时间"
     )

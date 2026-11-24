@@ -26,6 +26,7 @@ from app.repositories.mysql.meta.query_history_repository import QueryHistoryRep
 from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
 from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
 from app.services.demo_query_service import run_demo_query
+from app.services.query_clarification import continue_clarification, historical_question
 from app.services.result_summary import summarize_result
 
 # 整条问数链路的服务端超时
@@ -63,14 +64,25 @@ class QueryService:
         self.meta_session_factory = meta_session_factory
         self.demo_mode = demo_mode
 
-    async def query(self, query: str):
+    async def prepare_clarification(self, parent_history_id: str, answer: str) -> dict:
+        history = await self.query_history_repository.get_by_id(parent_history_id)
+        return continue_clarification(history, answer)
+
+    async def query(self, query: str, clarification_context: dict | None = None):
         """执行一次问数工作流，并逐段产出 SSE 消息"""
 
         history_id = str(uuid.uuid4())
-        await self.query_history_repository.create(history_id, query)
+        recorded_query = (
+            historical_question(clarification_context)
+            if clarification_context
+            else query
+        )
+        await self.query_history_repository.create(history_id, recorded_query)
 
         # aclosing 保证提前退出时内层生成器和 graph.astream 被及时关闭，不再调度后续节点
-        async with aclosing(self._run(query, history_id)) as chunks:
+        async with aclosing(
+            self._run(query, history_id, clarification_context)
+        ) as chunks:
             try:
                 async for chunk in chunks:
                     yield chunk
@@ -92,7 +104,9 @@ class QueryService:
         if scope.cancelled_caught:
             logger.warning("标记查询中断超时：{}", history_id)
 
-    async def _run(self, query: str, history_id: str):
+    async def _run(
+        self, query: str, history_id: str, clarification_context: dict | None = None
+    ):
         """按运行模式执行问数链路，并逐段产出 SSE 消息"""
 
         if self.demo_mode:
@@ -106,7 +120,8 @@ class QueryService:
             return
 
         # State 只放会被图节点读写和合并的业务数据，外部工具对象不塞进 State
-        state = DataAgentState(query=query)
+        input_context = clarification_context or {"original_query": query, "turns": []}
+        state = DataAgentState(query=query, clarification_context=input_context)
         # Context 保存本次图执行需要复用的外部依赖，节点通过 runtime.context 读取
         context = DataAgentContext(
             column_qdrant_repository=self.column_qdrant_repository,
@@ -118,6 +133,7 @@ class QueryService:
         )
         has_result = False
         has_error = False
+        has_response = False
         try:
             # stream_mode="custom" 对应节点内部 writer(...) 写出的进度消息
             async with (
@@ -127,7 +143,16 @@ class QueryService:
                 ) as stream,
             ):
                 async for chunk in stream:
-                    if chunk.get("type") == "result":
+                    if chunk.get("type") == "assessment":
+                        if chunk.get("status") not in {"clarify", "unsupported"}:
+                            raise ValueError("问数检查返回了无效的业务回复")
+                        has_response = True
+                        chunk = {**chunk, "history_id": history_id}
+                        await self.query_history_repository.mark_response(
+                            history_id,
+                            {**chunk, "clarification_context": input_context},
+                        )
+                    elif chunk.get("type") == "result":
                         has_result = True
                         data = chunk.get("data")
                         # 截断标记不单独落库，体现在持久化的摘要文案里
@@ -148,7 +173,7 @@ class QueryService:
                     # SSE 要求每条消息以 data: 开头，并以两个换行符结束
                     yield f"data: {json.dumps(chunk, ensure_ascii=False, default=str)}\n\n"
 
-            if not has_result and not has_error:
+            if not has_result and not has_error and not has_response:
                 message = "流程结束但未返回查询结果"
                 await self.query_history_repository.mark_error(history_id, message)
                 error = {"type": "error", "message": message}

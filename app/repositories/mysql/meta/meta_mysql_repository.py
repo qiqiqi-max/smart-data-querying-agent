@@ -8,7 +8,7 @@ Repository 自身只关心“如何写入”，而“哪些写操作要放在同
 问数链路运行时也会从这里读取元数据，用来把召回到的 id 补齐成完整实体
 """
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.entities.column_info import ColumnInfo
@@ -16,6 +16,7 @@ from app.entities.column_metric import ColumnMetric
 from app.entities.metric_info import MetricInfo
 from app.entities.table_info import TableInfo
 from app.models.column_info import ColumnInfoMySQL
+from app.models.metric_info import MetricInfoMySQL
 from app.models.table_info import TableInfoMySQL
 from app.repositories.mysql.meta.mappers.column_info_mapper import ColumnInfoMapper
 from app.repositories.mysql.meta.mappers.column_metric_mapper import ColumnMetricMapper
@@ -28,6 +29,69 @@ class MetaMySQLRepository:
 
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def get_query_catalog(self) -> dict:
+        """Read the full registered catalog, independently of similarity retrieval."""
+        tables = (
+            (
+                await self.session.execute(
+                    select(TableInfoMySQL).order_by(TableInfoMySQL.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        columns = (
+            (
+                await self.session.execute(
+                    select(ColumnInfoMySQL).order_by(ColumnInfoMySQL.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        metrics = (
+            (
+                await self.session.execute(
+                    select(MetricInfoMySQL).order_by(MetricInfoMySQL.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return {
+            "tables": [
+                {
+                    "name": table.name,
+                    "role": table.role,
+                    "description": table.description or "",
+                    "columns": [
+                        {
+                            "id": column.id,
+                            "name": column.name,
+                            "type": column.type or "",
+                            "role": column.role or "",
+                            "description": column.description or "",
+                            "alias": column.alias or [],
+                            "examples": column.examples or [],
+                        }
+                        for column in columns
+                        if column.table_id == table.id
+                    ],
+                }
+                for table in tables
+            ],
+            "metrics": [
+                {
+                    "id": metric.id,
+                    "name": metric.name,
+                    "description": metric.description or "",
+                    "relevant_columns": metric.relevant_columns or [],
+                    "alias": metric.alias or [],
+                }
+                for metric in metrics
+            ],
+        }
 
     def save_table_infos(self, table_infos: list[TableInfo]):
         """批量保存表元数据。输入仍然是业务实体，而不是 ORM 模型"""

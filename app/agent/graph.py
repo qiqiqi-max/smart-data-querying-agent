@@ -14,6 +14,7 @@ from langgraph.graph import StateGraph
 
 from app.agent.context import DataAgentContext
 from app.agent.nodes.add_extra_context import add_extra_context
+from app.agent.nodes.assess_query import assess_query
 from app.agent.nodes.correct_sql import correct_sql
 from app.agent.nodes.extract_keywords import extract_keywords
 from app.agent.nodes.fail_sql import fail_sql
@@ -56,6 +57,7 @@ def route_after_validation(state: DataAgentState) -> str:
 graph_builder = StateGraph(state_schema=DataAgentState, context_schema=DataAgentContext)
 
 # 注册节点：每个节点负责问数链路中的一个清晰步骤
+graph_builder.add_node("assess_query", assess_query)
 graph_builder.add_node("extract_keywords", extract_keywords)
 graph_builder.add_node("recall_column", recall_column)
 graph_builder.add_node("recall_value", recall_value)
@@ -71,7 +73,14 @@ graph_builder.add_node("fail_sql", fail_sql)
 graph_builder.add_node("run_sql", run_sql)
 
 # 从用户问题开始，先抽取关键词作为后续检索的基础
-graph_builder.add_edge(START, "extract_keywords")
+graph_builder.add_edge(START, "assess_query")
+graph_builder.add_conditional_edges(
+    "assess_query",
+    lambda state: (
+        "extract_keywords" if state["assessment"]["status"] == "ready" else END
+    ),
+    {"extract_keywords": "extract_keywords", END: END},
+)
 
 # 关键词抽取后并行进入三类召回，分别面向字段 字段值和业务指标
 graph_builder.add_edge("extract_keywords", "recall_column")

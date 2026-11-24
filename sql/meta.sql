@@ -6,6 +6,8 @@ GRANT ALL PRIVILEGES ON meta.* TO 'smart-data-querying-agent'@'%';
 USE meta;
 
 DROP TABLE IF EXISTS table_info;
+-- query_history is created by the application ORM; startup adds missing nullable
+-- sql/response columns to old history tables without replacing existing data.
 CREATE TABLE table_info
 (
     id          VARCHAR(64) PRIMARY KEY COMMENT '表编号',

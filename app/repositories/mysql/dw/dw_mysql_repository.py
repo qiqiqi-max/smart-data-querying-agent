@@ -23,6 +23,22 @@ class DWMySQLRepository:
     # 最终查询最多返回的行数，避免大结果集全部读入内存并写入历史记录
     MAX_RESULT_ROWS = 1000
 
+    async def get_schema_columns(self) -> dict[str, dict[str, str]]:
+        """Inspect only the currently connected business database."""
+        result = await self.session.execute(
+            text(
+                "SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name, DATA_TYPE AS data_type "
+                "FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+                "ORDER BY TABLE_NAME, ORDINAL_POSITION"
+            )
+        )
+        schema: dict[str, dict[str, str]] = {}
+        for row in result.mappings().all():
+            schema.setdefault(row["table_name"], {})[row["column_name"]] = row[
+                "data_type"
+            ]
+        return schema
+
     def __init__(self, session: AsyncSession):
         self.session = session
 

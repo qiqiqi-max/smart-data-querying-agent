@@ -22,15 +22,18 @@ body,
 
 body {
   margin: 0;
+  font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
   background-color: #f1f5f9;
   color: #0f172a;
   overflow: hidden;
 }
 
-/* 紧凑而高效的专业数据滚动条 */
+/* 清晰可见且易于拖动的滚动条。 */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -38,12 +41,25 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 3px;
+  background: #94a3b8;
+  border: 2px solid #f8fafc;
+  border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #64748b;
+}
+
+:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
+}
+
+/* The composer container supplies its focus indicator; avoid a second inner ring. */
+.query-composer textarea:focus,
+.query-composer textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 ::selection {

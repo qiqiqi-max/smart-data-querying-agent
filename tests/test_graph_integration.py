@@ -8,6 +8,7 @@ from langchain_core.runnables import RunnableLambda
 
 from app.agent import graph as graph_module
 from app.agent.context import DataAgentContext
+from app.agent.nodes import assess_query as assess_query_module
 from app.agent.nodes import correct_sql as correct_sql_module
 from app.agent.nodes import filter_metric as filter_metric_module
 from app.agent.nodes import filter_table as filter_table_module
@@ -97,6 +98,24 @@ class _FakeValueRepository:
 
 
 class _FakeMetaRepository:
+    async def get_query_catalog(self):
+        return {
+            "tables": [
+                {
+                    "name": table,
+                    "role": "fact",
+                    "description": "",
+                    "columns": [
+                        {**_copy(column).__dict__}
+                        for column in COLUMNS.values()
+                        if column.table_id == table
+                    ],
+                }
+                for table in KEY_COLUMNS
+            ],
+            "metrics": [dict(GMV.__dict__)],
+        }
+
     async def get_column_info_by_id(self, column_id):
         return _copy(COLUMNS[column_id])
 
@@ -113,6 +132,16 @@ class _FakeDWRepository:
         self.validation_errors = list(validation_errors)
         self.validated: list[str] = []
         self.ran: list[str] = []
+
+    async def get_schema_columns(self):
+        return {
+            table: {
+                column.name: column.type
+                for column in COLUMNS.values()
+                if column.table_id == table
+            }
+            for table in KEY_COLUMNS
+        }
 
     async def get_db_info(self):
         return {"dialect": "mysql", "version": "8.0.37"}
@@ -142,9 +171,43 @@ class _LLMCalls:
         return RunnableLambda(answer)
 
 
-def _install_fake_llms(monkeypatch, correct_sql_response=CORRECTED_SQL):
+def _ready_assessment():
+    return {
+        "status": "ready",
+        "reason": "clear",
+        "message": "",
+        "questions": [],
+        "missing_information": [],
+        "resolved_query": QUERY,
+        "required_tables": ["fact_order", "dim_region"],
+        "required_columns": [
+            "fact_order.order_amount",
+            "fact_order.region_id",
+            "dim_region.region_id",
+            "dim_region.region_name",
+        ],
+        "metrics": [
+            {
+                "name": "GMV",
+                "source": "configured",
+                "metric_id": "metric.gmv",
+                "definition": "成交总额",
+                "evidence": "",
+                "required_columns": ["fact_order.order_amount"],
+            }
+        ],
+    }
+
+
+def _install_fake_llms(
+    monkeypatch, correct_sql_response=CORRECTED_SQL, assessment_response=None
+):
     calls = _LLMCalls()
     responses = {
+        assess_query_module: (
+            "assess_query",
+            json.dumps(assessment_response or _ready_assessment(), ensure_ascii=False),
+        ),
         recall_column_module: ("recall_column", json.dumps(["订单金额"])),
         recall_metric_module: ("recall_metric", json.dumps(["GMV"])),
         recall_value_module: ("recall_value", json.dumps(["华北"])),
@@ -178,11 +241,11 @@ def _context(dw_repository):
     )
 
 
-def _run_graph(dw_repository):
+def _run_graph(dw_repository, query=QUERY):
     async def exercise():
         events, final_state = [], None
         async for mode, chunk in graph_module.graph.astream(
-            input=DataAgentState(query=QUERY),
+            input=DataAgentState(query=query),
             context=_context(dw_repository),
             stream_mode=["custom", "values"],
         ):
@@ -204,6 +267,7 @@ def _progress(events):
 
 
 NODE_STEPS = [
+    "检查问题与数据",
     "抽取关键词",
     "召回字段信息",
     "召回字段取值",
@@ -283,7 +347,7 @@ def test_graph_corrects_sql_once_after_validation_error(monkeypatch):
 
 
 def test_graph_stops_after_max_corrections_without_running_sql(monkeypatch):
-    calls = _install_fake_llms(monkeypatch, correct_sql_response="SELECT broken")
+    calls = _install_fake_llms(monkeypatch, correct_sql_response=GENERATED_SQL)
     errors = ["bad sql 1", "bad sql 2", "bad sql 3"]
     dw_repository = _FakeDWRepository(errors)
 
@@ -298,10 +362,128 @@ def test_graph_stops_after_max_corrections_without_running_sql(monkeypatch):
     assert events[-1] == {
         "type": "error",
         "message": "bad sql 3",
-        "sql": "SELECT broken",
+        "sql": GENERATED_SQL,
     }
     assert ("SQL校验失败", "error") in _progress(events)
     assert not any(event["type"] == "result" for event in events)
+
+
+@pytest.mark.parametrize(
+    ("status", "reason", "message", "questions", "missing"),
+    [
+        (
+            "unsupported",
+            "missing_data",
+            "数据源缺少商品评价信息。",
+            [],
+            ["商品评价或评分"],
+        ),
+        (
+            "clarify",
+            "ambiguous_query",
+            "请补充时间和指标。",
+            ["查看哪个时间范围？", "销售额还是销量？"],
+            [],
+        ),
+    ],
+)
+def test_graph_missing_data_or_clarification_never_generates_or_runs_sql(
+    monkeypatch, status, reason, message, questions, missing
+):
+    decision = {
+        **_ready_assessment(),
+        "status": status,
+        "reason": reason,
+        "message": message,
+        "questions": questions,
+        "missing_information": missing,
+        "resolved_query": "",
+        "required_tables": [],
+        "required_columns": [],
+        "metrics": [],
+    }
+    calls = _install_fake_llms(monkeypatch, assessment_response=decision)
+    repository = _FakeDWRepository()
+    events, state = _run_graph(repository)
+    assert events[-1]["type"] == "assessment"
+    assert events[-1]["status"] == status
+    assert "生成SQL" not in {event.get("step") for event in events}
+    assert repository.ran == repository.validated == []
+    assert set(calls.prompts) == {"assess_query"}
+    assert "sql" not in state
+
+
+def test_graph_required_field_survives_retrieval_miss_and_model_filter(monkeypatch):
+    query = "列出华北地区的订单编号"
+    decision = {
+        **_ready_assessment(),
+        "resolved_query": query,
+        "required_columns": [
+            "fact_order.order_id",
+            "fact_order.region_id",
+            "dim_region.region_id",
+            "dim_region.region_name",
+        ],
+        "metrics": [],
+    }
+    calls = _install_fake_llms(monkeypatch, assessment_response=decision)
+
+    async def no_columns(self, vector):
+        return []
+
+    monkeypatch.setattr(_FakeColumnRepository, "search", no_columns)
+    sql = "SELECT f.order_id FROM fact_order f JOIN dim_region r ON f.region_id = r.region_id WHERE r.region_name = '华北'"
+    monkeypatch.setattr(generate_sql_module, "llm", calls.fake("generate_sql", sql))
+    repository = _FakeDWRepository()
+    events, state = _run_graph(repository, query=query)
+    assert events[-1]["type"] == "result"
+    assert repository.ran == [sql]
+    fact = next(
+        table for table in state["table_infos"] if table["name"] == "fact_order"
+    )
+    assert "order_id" in {column["name"] for column in fact["columns"]}
+
+
+def test_graph_evaluator_failure_cannot_skip_check(monkeypatch):
+    _install_fake_llms(monkeypatch)
+
+    def broken(prompt):
+        raise RuntimeError("assessment unavailable")
+
+    monkeypatch.setattr(assess_query_module, "llm", RunnableLambda(broken))
+    repository = _FakeDWRepository()
+    with pytest.raises(RuntimeError, match="assessment unavailable"):
+        _run_graph(repository)
+    assert repository.ran == repository.validated == []
+
+
+def test_count_star_keeps_required_table_without_retrieved_columns(monkeypatch):
+    query = "统计所有订单的条数"
+    decision = {
+        **_ready_assessment(),
+        "resolved_query": query,
+        "required_tables": ["fact_order"],
+        "required_columns": [],
+        "metrics": [],
+    }
+    calls = _install_fake_llms(monkeypatch, assessment_response=decision)
+
+    async def empty(self, *args):
+        return []
+
+    monkeypatch.setattr(_FakeColumnRepository, "search", empty)
+    monkeypatch.setattr(_FakeMetricRepository, "search", empty)
+    monkeypatch.setattr(_FakeValueRepository, "search", empty)
+    monkeypatch.setattr(
+        filter_table_module, "llm", calls.fake("filter_table", json.dumps({}))
+    )
+    sql = "SELECT COUNT(*) AS 订单数 FROM fact_order"
+    monkeypatch.setattr(generate_sql_module, "llm", calls.fake("generate_sql", sql))
+    repository = _FakeDWRepository()
+    events, state = _run_graph(repository, query=query)
+    assert events[-1]["type"] == "result"
+    assert repository.ran == [sql]
+    assert {table["name"] for table in state["table_infos"]} == {"fact_order"}
 
 
 def test_graph_propagates_node_failure(monkeypatch):

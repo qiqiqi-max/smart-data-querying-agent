@@ -26,6 +26,9 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
     writer({"type": "progress", "step": step, "status": "running"})
 
     try:
+        assessment = state.get("assessment")
+        if not assessment or assessment["status"] != "ready":
+            raise ValueError("查询尚未通过数据与口径检查，不能生成 SQL")
         # 这些上下文都由前置节点准备完成，模型只在给定表 字段 指标口径范围内生成 SQL
         table_infos = state["table_infos"]
         metric_infos = state["metric_infos"]
@@ -41,6 +44,7 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
                 "date_info",
                 "db_info",
                 "query",
+                "confirmed_plan",
             ],
         )
         # SQL 生成节点只需要纯文本 SQL，不能要求模型输出 JSON 或 Markdown 代码块
@@ -59,6 +63,9 @@ async def generate_sql(state: DataAgentState, runtime: Runtime[DataAgentContext]
                 "date_info": yaml.dump(date_info, allow_unicode=True, sort_keys=False),
                 "db_info": yaml.dump(db_info, allow_unicode=True, sort_keys=False),
                 "query": query,
+                "confirmed_plan": yaml.dump(
+                    assessment, allow_unicode=True, sort_keys=False
+                ),
             }
         )
         result = clean_llm_sql(result)

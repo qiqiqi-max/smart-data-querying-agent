@@ -48,13 +48,22 @@ async def filter_table(state: DataAgentState, runtime: Runtime[DataAgentContext]
         )
         # 模型只负责选择，程序根据选择结果从原始 TableInfoState 中裁剪，避免模型重写复杂结构出错
         filtered_table_infos: list[TableInfoState] = []
+        required = set((state.get("assessment") or {}).get("required_columns", []))
+        required_tables = set(
+            (state.get("assessment") or {}).get("required_tables", [])
+        )
         for table_info in table_infos:
-            if table_info["name"] in result:
-                table_info["columns"] = [
-                    column_info
-                    for column_info in table_info["columns"]
-                    if column_info["name"] in result[table_info["name"]]
-                ]
+            selected = result.get(table_info["name"], [])
+            columns = [
+                column
+                for column in table_info["columns"]
+                if column["name"] in selected
+                or f"{table_info['name']}.{column['name']}" in required
+            ]
+            if not columns and table_info["name"] in required_tables:
+                columns = table_info["columns"]
+            if columns or table_info["name"] in required_tables:
+                table_info["columns"] = columns
                 filtered_table_infos.append(table_info)
 
         logger.info(

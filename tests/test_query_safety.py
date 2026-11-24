@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from app.agent import query_assessment as assessment_module
 from app.agent.graph import route_after_validation
 from app.agent.keyword_utils import dedupe_preserve_order
 from app.agent.sql_utils import clean_llm_sql
@@ -13,6 +14,61 @@ from app.repositories.mysql.meta.query_history_repository import (
     QueryHistoryRepository,
     QueryHistoryRunningError,
 )
+
+CONTEXT_TABLES = [
+    {
+        "name": "fact_order",
+        "columns": [
+            {"name": "order_id", "type": "int"},
+            {"name": "order_amount", "type": "decimal"},
+        ],
+    }
+]
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT customer_score FROM fact_order",
+        "SELECT * FROM secret_table",
+        "SELECT order_amount FROM other_db.fact_order",
+    ],
+)
+def test_query_context_rejects_unknown_column_table_and_database(sql):
+    with pytest.raises(ValueError):
+        assessment_module.check_sql_context(sql, CONTEXT_TABLES)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT SUM(f.order_amount) AS total FROM fact_order f ORDER BY total",
+        "WITH x AS (SELECT order_amount FROM fact_order) SELECT SUM(order_amount) AS total FROM x",
+        "SELECT order_amount FROM fact_order UNION ALL SELECT order_amount FROM fact_order",
+    ],
+)
+def test_query_context_supports_aliases_ctes_and_union(sql):
+    assessment_module.check_sql_context(
+        sql, CONTEXT_TABLES, required_columns=["fact_order.order_amount"]
+    )
+
+
+def test_query_context_rejects_sql_that_drops_required_information():
+    with pytest.raises(ValueError):
+        assessment_module.check_sql_context(
+            "SELECT order_id FROM fact_order",
+            CONTEXT_TABLES,
+            required_columns=["fact_order.order_amount"],
+        )
+
+
+def test_query_context_accepts_the_configured_database_qualifier():
+    assessment_module.check_sql_context(
+        "SELECT order_amount FROM dw.fact_order",
+        CONTEXT_TABLES,
+        required_columns=["fact_order.order_amount"],
+        database="dw",
+    )
 
 
 @pytest.mark.parametrize(

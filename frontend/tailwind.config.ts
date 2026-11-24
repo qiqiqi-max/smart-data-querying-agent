@@ -20,6 +20,8 @@ export default {
           "Menlo",
           "Monaco",
           "Consolas",
+          '"Microsoft YaHei"',
+          '"PingFang SC"',
           "monospace",
         ],
       },

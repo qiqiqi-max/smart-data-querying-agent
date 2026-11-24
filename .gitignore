@@ -42,6 +42,9 @@ speed-measure-plugin*.json
 !.vscode/launch.json
 !.vscode/extensions.json
 .history/*
+.zcode/
+.worktrees/
+.superpowers/
 
 # Misc (build / logs)
 /.sass-cache
@@ -64,4 +67,8 @@ testem.log
 Thumbs.db
 
 # Local embedding model files (large)
-models/
+/models/
+
+# Browser verification artifacts
+.playwright-cli/
+output/playwright/

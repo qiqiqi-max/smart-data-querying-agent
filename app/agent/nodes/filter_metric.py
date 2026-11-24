@@ -27,6 +27,11 @@ async def filter_metric(state: DataAgentState, runtime: Runtime[DataAgentContext
     try:
         query = state["query"]
         metric_infos: list[MetricInfoState] = state["metric_infos"]
+        if state.get("assessment"):
+            # These definitions were already approved as necessary; another model
+            # must neither discard them nor substitute a guessed metric.
+            writer({"type": "progress", "step": step, "status": "success"})
+            return {"metric_infos": metric_infos}
 
         # metric_infos 转成 YAML 后作为候选项交给模型，模型只需要返回被选中的指标名称
         prompt = PromptTemplate(
